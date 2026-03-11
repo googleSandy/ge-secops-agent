@@ -1,8 +1,25 @@
-"""
-SOC Agent Module - Simple and Explicit Configuration
+# IMPORTANT: Override location BEFORE any google imports to enable Gemini 3.x models
+# Gemini 3.x models require location="global" but Reasoning Engine deploys to a specific region
+# This workaround routes model API calls to global while keeping Reasoning Engine regional
+# See: https://github.com/google/adk-python/issues/3628#issuecomment-3595215761
+import os
+os.environ['GOOGLE_CLOUD_LOCATION'] = 'global'
+os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = 'TRUE'
 
-This module shows exactly how to configure a Security Operations Agent
-with MCP tools and RAG retrieval, following ADK standards.
+"""
+SOC Agent Module - Orchestrator with Sub-Agent Delegation
+
+This module implements a multi-agent orchestrator pattern that intelligently delegates
+tasks to specialized sub-agents using LLM-based delegation (sub_agents pattern).
+
+ARCHITECTURE:
+- Main orchestrator (gemini-3.1-pro-preview): Routes requests to appropriate specialists via LLM delegation
+  - Direct tool: RAG retrieval (VertexAiRagRetrieval) for runbooks and procedures
+  - Delegates to: CTI sub-agent and Tier 1 sub-agent via sub_agents (not AgentTool)
+- CTI sub-agent (gemini-3.1-flash-preview): Threat intelligence research with MCP tools (GTI, SecOps SIEM, SecOps SOAR, SCC)
+- Tier 1 sub-agent (gemini-3.1-flash-preview): Alert triage with MCP tools (SecOps SIEM, SecOps SOAR, GTI)
+
+CRITICAL: Uses sub_agents delegation (not AgentTool) to avoid AFC incompatibility with MCP servers
 
 ARCHITECTURAL DECISION: Intentional Code Duplication
 ======================================================
@@ -33,6 +50,7 @@ See PR #25 discussion for additional context on this architectural decision.
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 import vertexai
@@ -40,28 +58,78 @@ from dotenv import load_dotenv
 from google.adk.agents import Agent
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
-from google.adk.tools.retrieval.vertex_ai_rag_retrieval import VertexAiRagRetrieval
+from google.adk.tools.retrieval import VertexAiRagRetrieval
 from mcp import StdioServerParameters
-from vertexai.preview import rag
 
+# Determine Python executable based on environment
+# In deployed Vertex AI environment, use container's Python
+# In local development, use sys.executable (respects venv)
+PYTHON_EXECUTABLE = "python3" if os.environ.get("REASONING_ENGINE_DEPLOYMENT") == "True" else sys.executable
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ========================================================================
+# Persona Definitions (extracted from specialized agents)
+# ========================================================================
+
+CTI_PERSONA = """
+## Cyber Threat Intelligence (CTI) Researcher
+
+### Overview
+The Cyber Threat Intelligence (CTI) Researcher focuses on the proactive discovery, analysis, and dissemination of intelligence regarding cyber threats. They delve deep into threat actors, malware families, campaigns, vulnerabilities, and Tactics, Techniques, and Procedures (TTPs) to understand the evolving threat landscape.
+
+### Primary Responsibilities
+- Conduct in-depth research on threat actors, malware families, campaigns, and vulnerabilities
+- Identify, extract, analyze, and contextualize IOCs and TTPs. Map findings to MITRE ATT&CK framework
+- Monitor and track threat actor activities, infrastructure, and evolution over time
+- Produce detailed and actionable threat intelligence reports
+- Collaborate with SOC analysts, incident responders, and security engineers
+
+### Core Skills
+- Deep understanding of cyber threat landscape
+- Proficiency in threat intelligence platforms (Google Threat Intelligence/VirusTotal)
+- Strong knowledge of IOC types and TTPs
+- Experience with OSINT gathering and MITRE ATT&CK framework
+- Excellent analytical and report writing skills
+"""
+
+TIER1_PERSONA = """
+## Tier 1 SOC Analyst
+
+### Overview
+The Tier 1 SOC Analyst is the first line of defense, responsible for monitoring security alerts, performing initial triage, and escalating incidents based on predefined procedures.
+
+### Primary Responsibilities
+- Actively monitor alert queues in SOAR platform
+- Perform initial assessment based on severity, type, and initial indicators
+- Gather preliminary information using basic lookup tools
+- Create and manage cases in SOAR
+- Identify and close duplicate cases or false positives
+- Escalate complex or confirmed incidents to Tier 2/3 analysts
+- Maintain clear documentation within SOAR cases
+
+### Core Skills
+- Understanding of fundamental cybersecurity concepts
+- Ability to perform basic entity enrichment using SIEM
+- Strong attention to detail and ability to follow procedures
+- Good communication skills for documentation and escalation
+"""
+
 
 def create_agent():
     """
-    Create the SOC Agent with all MCP tools and RAG retrieval configured.
+    Create the SOC Orchestrator Agent with specialized sub-agents.
 
-    This function explicitly shows how to:
-    1. Load environment variables
-    2. Configure each MCP tool
-    3. Set up RAG retrieval
-    4. Create the agent with all tools
+    This function creates a multi-agent system where:
+    1. Main orchestrator routes requests to appropriate specialists
+    2. RAG sub-agent handles runbook retrieval
+    3. CTI sub-agent handles threat intelligence research and quick lookups
+    4. Tier 1 sub-agent handles alert triage and case management
 
     Returns:
-        Configured Agent instance
+        Configured Agent instance (orchestrator)
     """
     # Load environment variables from .env file
     load_dotenv(Path(".env"), override=True)
@@ -77,63 +145,66 @@ def create_agent():
     CHRONICLE_PROJECT_ID = os.environ.get("CHRONICLE_PROJECT_ID")
     CHRONICLE_REGION = os.environ.get("CHRONICLE_REGION", "us")
     CHRONICLE_SERVICE_ACCOUNT_PATH = os.environ.get("CHRONICLE_SERVICE_ACCOUNT_PATH")
+    CHRONICLE_SERVICE_ACCOUNT_SECRET = os.environ.get("CHRONICLE_SERVICE_ACCOUNT_SECRET")
 
-    # Validate required Chronicle environment variables before Vertex AI initialization.
-    # Note: Comprehensive validation of all required variables happens in
-    # manage_agent_engine.py before deployment. This validates only Chronicle-specific
-    # variables to fail fast before expensive Vertex AI initialization.
+    # Validate required Chronicle environment variables
     if not CHRONICLE_PROJECT_ID:
         raise ValueError(
             "CHRONICLE_PROJECT_ID is required. Please set it in your .env file."
         )
-    if not CHRONICLE_SERVICE_ACCOUNT_PATH:
+
+    # Validate service account configuration (either secret or file path required)
+    if not CHRONICLE_SERVICE_ACCOUNT_SECRET and not CHRONICLE_SERVICE_ACCOUNT_PATH:
         raise ValueError(
-            "CHRONICLE_SERVICE_ACCOUNT_PATH is required. Please set it in your .env file."
+            "Either CHRONICLE_SERVICE_ACCOUNT_SECRET or CHRONICLE_SERVICE_ACCOUNT_PATH is required.\n"
+            "Set CHRONICLE_SERVICE_ACCOUNT_SECRET for Secret Manager (recommended) or\n"
+            "CHRONICLE_SERVICE_ACCOUNT_PATH for local file."
         )
 
-    # Verify service account file exists
-    service_account_path = Path(CHRONICLE_SERVICE_ACCOUNT_PATH)
-    if not service_account_path.exists():
-        raise FileNotFoundError(
-            f"Chronicle service account file not found: {CHRONICLE_SERVICE_ACCOUNT_PATH}\n"
-            f"Please verify the path in your .env file points to a valid service account JSON file."
-        )
-
-    # Initialize Vertex AI for the agent to work with Gemini models and RAG
-    if GCP_PROJECT_ID and GCP_VERTEXAI_ENABLED == "True":
-        logger.info(
-            f"Initializing Vertex AI with project: {GCP_PROJECT_ID}, location: {GCP_LOCATION}"
-        )
-        vertexai.init(
-            project=GCP_PROJECT_ID,
-            location=GCP_LOCATION,
-            staging_bucket=GCP_STAGING_BUCKET,
-        )
+    # Verify service account file exists if using local path
+    if CHRONICLE_SERVICE_ACCOUNT_PATH:
+        service_account_path = Path(CHRONICLE_SERVICE_ACCOUNT_PATH)
+        if not service_account_path.exists():
+            raise FileNotFoundError(
+                f"Chronicle service account file not found: {CHRONICLE_SERVICE_ACCOUNT_PATH}\n"
+                f"Please verify the path in your .env file points to a valid service account JSON file."
+            )
+        service_account_filename = service_account_path.name
+    else:
+        # Using Secret Manager - no local file needed
+        service_account_filename = None
 
     # SOAR configuration
     SOAR_URL = os.environ.get("SOAR_URL")
-    SOAR_API_KEY = os.environ.get("SOAR_API_KEY")
+    SOAR_APP_KEY = os.environ.get("SOAR_APP_KEY")
 
     # Google Threat Intelligence configuration
     GTI_API_KEY = os.environ.get("GTI_API_KEY")
 
+    # Build environment dict for MCP servers
+    # These credentials are passed to each MCP server process
+    mcp_env = {
+        "CHRONICLE_PROJECT_ID": CHRONICLE_PROJECT_ID or "",
+        "CHRONICLE_CUSTOMER_ID": CHRONICLE_CUSTOMER_ID or "",
+        "CHRONICLE_REGION": CHRONICLE_REGION or "us",
+        "SOAR_URL": SOAR_URL or "",
+        "SOAR_APP_KEY": SOAR_APP_KEY or "",
+        "VT_APIKEY": GTI_API_KEY or "",  # GTI uses VT_APIKEY
+        "GCP_PROJECT_ID": GCP_PROJECT_ID or "",
+    }
+
+    # Add Chronicle service account if available
+    if CHRONICLE_SERVICE_ACCOUNT_SECRET:
+        mcp_env["CHRONICLE_SERVICE_ACCOUNT_SECRET"] = CHRONICLE_SERVICE_ACCOUNT_SECRET
+    elif service_account_filename:
+        # In deployed environment, service account will be available via Secret Manager
+        # For local development, pass the file path
+        mcp_env["CHRONICLE_SERVICE_ACCOUNT_FILE"] = str(CHRONICLE_SERVICE_ACCOUNT_PATH)
+
     # RAG configuration
     RAG_CORPUS_ID = os.environ.get("RAG_CORPUS_ID")
-
-    # Parse RAG numeric configuration with error handling
-    try:
-        RAG_SIMILARITY_TOP_K = int(os.environ.get("RAG_SIMILARITY_TOP_K", "10"))
-    except ValueError as e:
-        raise ValueError(
-            f"Invalid RAG_SIMILARITY_TOP_K value. Must be an integer. Error: {e}"
-        )
-
-    try:
-        RAG_DISTANCE_THRESHOLD = float(os.environ.get("RAG_DISTANCE_THRESHOLD", "0.6"))
-    except ValueError as e:
-        raise ValueError(
-            f"Invalid RAG_DISTANCE_THRESHOLD value. Must be a float. Error: {e}"
-        )
+    RAG_SIMILARITY_TOP_K = int(os.environ.get("RAG_SIMILARITY_TOP_K", "10"))
+    RAG_DISTANCE_THRESHOLD = float(os.environ.get("RAG_DISTANCE_THRESHOLD", "0.6"))
 
     # Debug mode
     DEBUG = os.environ.get("DEBUG", "False") == "True"
@@ -142,161 +213,422 @@ def create_agent():
         os.environ["GRPC_TRACE"] = "all"
         logging.basicConfig(level=logging.DEBUG)
         logging.getLogger("google").setLevel(logging.DEBUG)
-        logging.getLogger("google.auth").setLevel(logging.DEBUG)
-        logging.getLogger("google.api_core").setLevel(logging.DEBUG)
 
-    # Get service account filename for MCP servers (path already validated above)
-    service_account_filename = service_account_path.name
+    # Initialize Vertex AI for model access
+    # When deployed to Vertex AI Reasoning Engine, agents need Vertex AI initialized
+    # to use Vertex AI models instead of falling back to genai client
+    skip_vertexai_init = os.environ.get("SKIP_VERTEXAI_INIT", "False") == "True"
 
-    # Initialize list to collect all tools
-    tools = []
+    # Always initialize Vertex AI when enabled, using appropriate location
+    if not skip_vertexai_init and GCP_PROJECT_ID and GCP_VERTEXAI_ENABLED == "True":
+        # Determine location: use RAG location if RAG is configured, otherwise deployment location
+        if RAG_CORPUS_ID:
+            # Parse RAG location from corpus resource name
+            # Format: projects/PROJECT_ID/locations/LOCATION/ragCorpora/CORPUS_ID
+            rag_location = RAG_CORPUS_ID.split("/")[3] if "/" in RAG_CORPUS_ID else "us-east4"
+            init_location = rag_location
+            logger.info("Initializing Vertex AI for RAG corpus access")
+            logger.info(f"  Project: {GCP_PROJECT_ID}")
+            logger.info(f"  RAG location: {rag_location}")
+        else:
+            # No RAG - use deployment location
+            init_location = GCP_LOCATION
+            logger.info("Initializing Vertex AI for model access")
+            logger.info(f"  Project: {GCP_PROJECT_ID}")
+            logger.info(f"  Location: {init_location}")
 
-    # ========================================================================
-    # Configure Chronicle/SIEM MCP Tool
-    # ========================================================================
-    logger.info("Configuring Chronicle/SIEM tools...")
-    secops_siem_tools = McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command="uv",
-                args=[
-                    "--directory",
-                    "./mcp-security/server/secops/secops_mcp",
-                    "run",
-                    "server.py",
-                ],
-                env={
-                    "CHRONICLE_PROJECT_ID": CHRONICLE_PROJECT_ID,
-                    "CHRONICLE_CUSTOMER_ID": CHRONICLE_CUSTOMER_ID,
-                    "CHRONICLE_REGION": CHRONICLE_REGION,
-                    "SECOPS_SA_PATH": service_account_filename,
-                },
-            ),
-            timeout=60000,
-        ),
-        errlog=None,
-    )
-    tools.append(secops_siem_tools)
-
-    # ========================================================================
-    # Configure SOAR MCP Tool
-    # ========================================================================
-    logger.info("Configuring SOAR tools...")
-    secops_soar_tools = McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command="uv",
-                args=[
-                    "--directory",
-                    "./mcp-security/server/secops-soar/secops_soar_mcp",
-                    "run",
-                    "server.py",
-                ],
-                env={
-                    "SOAR_URL": SOAR_URL,
-                    "SOAR_APP_KEY": SOAR_API_KEY,  # MCP server expects SOAR_APP_KEY
-                },
-            ),
-            timeout=60000,
-        ),
-        errlog=None,
-    )
-    tools.append(secops_soar_tools)
-
-    # ========================================================================
-    # Configure Google Threat Intelligence (GTI) MCP Tool
-    # ========================================================================
-    logger.info("Configuring GTI tools...")
-    gti_tools = McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command="uv",
-                args=[
-                    "--directory",
-                    "./mcp-security/server/gti/gti_mcp",
-                    "run",
-                    "server.py",
-                ],
-                env={"VT_APIKEY": GTI_API_KEY},  # MCP server expects VT_APIKEY
-            ),
-            timeout=60000,
-        ),
-        errlog=None,
-    )
-    tools.append(gti_tools)
-
-    # ========================================================================
-    # Configure Security Command Center (SCC) MCP Tool
-    # ========================================================================
-    logger.info("Configuring SCC tools...")
-    scc_tools = McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command="uv",
-                args=["--directory", "./mcp-security/server/scc", "run", "scc_mcp.py"],
-                env={},
-            ),
-            timeout=60000,
-        ),
-        errlog=None,
-    )
-    tools.append(scc_tools)
-
-    # ========================================================================
-    # Configure RAG Retrieval Tool (if RAG corpus is configured)
-    # ========================================================================
-    if RAG_CORPUS_ID:
-        logger.info(f"Configuring RAG retrieval with corpus: {RAG_CORPUS_ID}")
-        ask_vertex_retrieval = VertexAiRagRetrieval(
-            name="retrieve_agentic_soc_runbooks",
-            description=(
-                "Use this tool to retrieve IRPs, Runbooks, Common Steps, and Personas for the Agentic SOC."
-            ),
-            rag_resources=[rag.RagResource(rag_corpus=RAG_CORPUS_ID)],
-            similarity_top_k=RAG_SIMILARITY_TOP_K,
-            vector_distance_threshold=RAG_DISTANCE_THRESHOLD,
+        vertexai.init(
+            project=GCP_PROJECT_ID,
+            location=init_location,
+            staging_bucket=GCP_STAGING_BUCKET,
         )
-        tools.append(ask_vertex_retrieval)
+    elif skip_vertexai_init:
+        logger.info("Skipping Vertex AI initialization (deployment mode)")
     else:
-        logger.warning("RAG_CORPUS_ID not configured, skipping RAG retrieval tool")
+        logger.info("Vertex AI not initialized - agents will use Gemini API key")
+        logger.info("  Gemini API key from environment: GEMINI_API_KEY")
+        logger.info("  No location restrictions - all Gemini models available")
 
     # ========================================================================
-    # Create the Agent with all configured tools
+    # SUB-AGENT 1: CTI Researcher (GTI + Chronicle + SOAR)
     # ========================================================================
-    logger.info(f"Creating SOC Agent with {len(tools)} tools...")
+    logger.info("Creating CTI sub-agent...")
 
-    agent = Agent(
-        model="gemini-2.5-pro",
-        name="soc_assistant",
-        description="Security Operations reasoning agent with access to Agentic SOC MCP tools and runbook search.",
-        instruction="""You are a Security Operations assistant with comprehensive access to MCP security tools including RAG-based runbook and documentation retrieval.
+    cti_tools = []
 
-YOUR CAPABILITIES:
-- Retrieve security Runbooks, IRPs, Common Steps, Procedures, guidelines, and personas using retrieve_agentic_soc_runbooks tool
-- Query Chronicle/SIEM for security events and detections
-- Manage SOAR cases and incidents
-- Access threat intelligence through GTI tools
-- Retrieve SCC findings and cloud security posture
-- Use list_tools to get full MCP Tool list
+    # GTI tools for threat intelligence
+    cti_tools.append(
+        McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=PYTHON_EXECUTABLE,
+                    args=["-m", "gti_mcp.server"],
+                    env=mcp_env
+                ),
+                timeout=120000  # 2 minutes for MCP server startup
+            ),
+            errlog=None  # Suppress errlog to permit serialization
+        )
+    )
+
+    # Chronicle for correlation
+    cti_tools.append(
+        McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=PYTHON_EXECUTABLE,
+                    args=["-m", "secops_mcp.server"],
+                    env=mcp_env
+                ),
+                timeout=120000
+            ),
+            errlog=None  # Suppress errlog to permit serialization
+        )
+    )
+
+    # SOAR for dissemination
+    cti_tools.append(
+        McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=PYTHON_EXECUTABLE,
+                    args=["-m", "secops_soar_mcp.server"],
+                    env=mcp_env
+                ),
+                timeout=120000
+            ),
+            errlog=None  # Suppress errlog to permit serialization
+        )
+    )
+
+    # SCC for cloud security findings
+    cti_tools.append(
+        McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=PYTHON_EXECUTABLE,
+                    args=["-m", "scc_mcp"],
+                    env=mcp_env
+                ),
+                timeout=120000
+            ),
+            errlog=None  # Suppress errlog to permit serialization
+        )
+    )
+
+    cti_subagent = Agent(
+        name="cti_researcher",
+        model="gemini-3.1-flash-preview",
+        description=CTI_PERSONA,
+        instruction="""You are a Cyber Threat Intelligence (CTI) Researcher focused on proactive threat discovery, analysis, and intelligence production.
+
+CRITICAL SAFETY RULE - NEVER HALLUCINATE:
+**NEVER make up threat intelligence data, IOCs, or findings. If a tool fails or returns an error, you MUST report the actual error to the user. Do NOT fabricate threat actor details, IOCs, attack patterns, or any other intelligence data. Honesty about tool failures is mandatory.**
+
+INTERPRETING TOOL RESPONSES:
+- **Tool Error (isError=True or exception)**: Report the actual error to the user
+- **Empty Success (isError=False, empty/null data)**: Confidently state "No results found" or "No [items] at this time"
+  - Example: `list_cases()` returns `{}` → "There are no open cases at this time"
+  - Example: `search_security_events()` returns `[]` → "No events matching the criteria were found"
+- Do NOT say "unable to retrieve" or "might indicate" when a tool succeeds with empty results - be definitive
+
+ROLE & FOCUS:
+- Specialize in threat actor tracking, malware analysis, and campaign investigation
+- Produce actionable intelligence that informs security strategy and operations
+- Apply structured analytical techniques and maintain high confidence standards
+
+ANALYTICAL APPROACH:
+1. Research Initiation: Start with clear intelligence requirements
+2. Data Collection: Use GTI as primary source, correlate with Chronicle
+3. Analysis & Pivoting: Follow relationships between entities, actors, campaigns (up to 5 levels deep)
+4. Intelligence Production: Create reports with confidence levels, source attribution, MITRE ATT&CK mapping
+5. Dissemination: Share findings through SOAR comments
+
+TOOL USAGE:
+- **GTI (PRIMARY)**: Threat research, IOC analysis, actor tracking, collection reports, MITRE mapping
+  - Specify which GTI tool you used (e.g., `get_ip_address_report()`, `get_file_report()`)
+- **Chronicle (CORRELATION)**: Validate threats locally, IOC hunting, prevalence checking
+  - When using `search_security_events()`, ALWAYS extract and present the UDM query from the response
+- **SOAR (DISSEMINATION)**: Add threat context to cases, formal insights
+- **SCC**: Cloud security findings and posture
+
+TRANSPARENCY IN RESPONSES:
+When reporting results, ALWAYS include:
+1. Which tool(s) you used (e.g., "I used `get_ip_address_report()` to lookup...")
+2. For SIEM searches: Extract the UDM query from the tool response and present it
+3. The actual results or "no results found" (be definitive about empty responses)
+
+INTELLIGENCE STANDARDS:
+- Include confidence levels (Low/Medium/High)
+- Provide source attribution and reliability scoring
+- Map TTPs to MITRE ATT&CK when possible
+- Include timeline of threat activity
+- Offer actionable defensive recommendations
+
+CRITICAL: When formulating analysis plans, summarize your approach and ask for user permission before executing state-changing tools.""",
+        tools=cti_tools,
+    )
+
+    # ========================================================================
+    # SUB-AGENT 2: Tier 1 SOC Analyst (Chronicle + SOAR + basic GTI)
+    # ========================================================================
+    logger.info("Creating Tier 1 sub-agent...")
+
+    tier1_tools = []
+
+    # Chronicle for basic entity lookups
+    tier1_tools.append(
+        McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=PYTHON_EXECUTABLE,
+                    args=["-m", "secops_mcp.server"],
+                    env=mcp_env
+                ),
+                timeout=120000
+            ),
+            errlog=None  # Suppress errlog to permit serialization
+        )
+    )
+
+    # SOAR for case management
+    tier1_tools.append(
+        McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=PYTHON_EXECUTABLE,
+                    args=["-m", "secops_soar_mcp.server"],
+                    env=mcp_env
+                ),
+                timeout=120000
+            ),
+            errlog=None  # Suppress errlog to permit serialization
+        )
+    )
+
+    # GTI for basic reputation checks
+    tier1_tools.append(
+        McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(
+                    command=PYTHON_EXECUTABLE,
+                    args=["-m", "gti_mcp.server"],
+                    env=mcp_env
+                ),
+                timeout=120000
+            ),
+            errlog=None  # Suppress errlog to permit serialization
+        )
+    )
+
+    tier1_subagent = Agent(
+        name="tier1_analyst",
+        model="gemini-3.1-flash-preview",
+        description=TIER1_PERSONA,
+        instruction="""You are a Tier 1 SOC Analyst - the first line of defense in security operations.
+
+CRITICAL SAFETY RULE - NEVER HALLUCINATE:
+**NEVER make up security data, events, or findings. If a tool fails or returns an error, you MUST report the actual error to the user. Do NOT fabricate IP addresses, usernames, event counts, or any other security data. Honesty about tool failures is mandatory.**
+
+INTERPRETING TOOL RESPONSES:
+- **Tool Error (isError=True or exception)**: Report the actual error to the user
+- **Empty Success (isError=False, empty/null data)**: Confidently state "No results found" or "No [items] at this time"
+  - Example: `list_cases()` returns `{}` → "There are no open cases in SOAR at this time"
+  - Example: `search_security_events()` returns `[]` → "No SIEM events matching the criteria were found"
+  - Example: `lookup_entity()` returns no data → "No SIEM data found for this entity"
+- Do NOT say "unable to retrieve" or "might indicate" when a tool succeeds with empty results - be definitive and clear
+
+ROLE & FOCUS:
+- Alert triage and initial investigation
+- Rapid assessment, basic enrichment, and appropriate escalation
+- Follow established runbooks - do not improvise beyond your scope
 
 WORKFLOW:
-1. When users ask about runbooks or procedures, use the retrieve_agentic_soc_runbooks tool to retrieve relevant documentation from the RAG corpus
-2. For security investigations, combine runbook guidance with live data from Chronicle, GTI, and SOAR
-3. Provide comprehensive responses that integrate procedural knowledge with real-time security data
+1. Alert Triage: Perform initial assessment using basic lookups
+2. Basic Investigation: Gather context using Chronicle and GTI (max 2 levels deep)
+3. Documentation: Document findings clearly in SOAR cases
+4. Escalation Decision: Identify when issues exceed Tier 1 scope
 
-KEY TOOLS:
-- retrieve_agentic_soc_runbooks: Retrieve security procedures and documentation from the RAG corpus
-- Chronicle tools: Query SIEM for security events
-- SOAR tools: Manage cases and incidents
-- GTI tools: Get threat intelligence
-- SCC tools: Cloud security findings
+ESCALATION PROTOCOL:
+Recommend escalation to Tier 2/3 when encountering:
+- Confirmed malicious activity or compromise
+- Ransomware, APT, data exfiltration, privilege escalation, lateral movement
+- Need for forensic analysis, containment, or remediation
+- Complex investigations beyond basic triage
 
-Always provide actionable guidance combining documented procedures with live security data.""",
-        tools=tools,
+TOOL USAGE:
+- **Chronicle (SIEM)**: Basic entity lookups and alert queries
+  - When using `search_security_events()`, ALWAYS extract and present the UDM query from the response
+- **SOAR**: Create/update cases, add findings, manage status
+  - Specify which tool you used (e.g., `list_cases()`, `get_case_full_details()`)
+- **GTI**: Basic reputation checks for suspicious indicators
+
+TRANSPARENCY IN RESPONSES:
+When reporting results, ALWAYS include:
+1. Which tool(s) you used (e.g., "I used the `list_cases()` tool...")
+2. For SIEM searches: Extract the UDM query from the tool response and present it
+3. The actual results or "no results found" (be definitive about empty responses)
+
+IMPORTANT LIMITATIONS:
+- Do NOT perform deep forensic analysis or advanced threat hunting
+- Do NOT make containment/remediation decisions - only recommend
+- Stay within 2 levels of IOC pivoting/investigation depth
+
+CRITICAL: Summarize procedures and ask for user permission before executing state-changing tools.""",
+        tools=tier1_tools,
     )
 
-    logger.info("SOC Agent created successfully!")
-    return agent
+    # Flash agent removed - orchestrator will route simple queries to CTI or Tier1 based on complexity
+
+    # ========================================================================
+    # MAIN ORCHESTRATOR: Routes requests to appropriate sub-agents
+    # ========================================================================
+    logger.info("Creating main orchestrator agent...")
+
+    # Build orchestrator tools list - only RAG tool (no function calling tools)
+    orchestrator_tools = []
+
+    # Add RAG tool DIRECTLY to orchestrator (not via sub-agent) to preserve grounding citations
+    if RAG_CORPUS_ID:
+        orchestrator_tools.append(
+            VertexAiRagRetrieval(
+                name="retrieve_agentic_soc_runbooks",
+                description="Retrieve IRPs, Runbooks, Common Steps, Procedures, guidelines, and Personas for the Agentic SOC.",
+                rag_corpora=[RAG_CORPUS_ID],
+                similarity_top_k=RAG_SIMILARITY_TOP_K,
+                vector_distance_threshold=RAG_DISTANCE_THRESHOLD,
+            )
+        )
+
+    # Create orchestrator with LLM delegation to specialists (not AgentTool wrappers)
+    # This avoids AFC (Automatic Function Calling) incompatibility with MCP servers
+    orchestrator = Agent(
+        name="secops_assistant",
+        model="gemini-3.1-pro-preview",
+        description="SecOps Security Agent - An intelligent SOC orchestrator for Google SecOps that delegates security operations to specialized persona-based agents.",
+        instruction="""You are the SecOps Security Agent orchestrator for Google SecOps - a sophisticated coordinator that intelligently delegates security operations to specialized persona-based agents and retrieves knowledge base documentation.
+
+YOUR ARCHITECTURE:
+You have direct access to:
+
+1. **retrieve_agentic_soc_runbooks** (RAG Knowledge Base):
+   - Directly retrieves SOC runbooks, IRPs, procedures, and documentation from RAG corpus
+   - Use for: "What's the procedure for...", "Show me the runbook for...", "How do we handle..."
+   - **IMPORTANT:** This tool provides grounding citations - preserve them in your response!
+
+You can delegate to 2 specialized agents:
+
+2. **cti_researcher** (Threat Intelligence specialist):
+   - Deep threat research, actor analysis, malware investigation, IOC analysis
+   - Tools: GTI (primary), SecOps SIEM (correlation), SecOps SOAR (dissemination), SCC
+   - Use for: "Analyze this threat actor...", "Research this malware...", "What TTPs are associated with..."
+   - Also handles: Quick threat lookups, IOC reputation checks, general security queries
+
+3. **tier1_analyst** (Alert Triage specialist):
+   - Initial alert triage, basic investigation, false positive identification
+   - Tools: SecOps SIEM (basic lookups), SecOps SOAR (case management), GTI (basic reputation)
+   - Use for: "Triage this alert...", "Is this a false positive...", "Initial assessment of..."
+   - Also handles: Quick SIEM/SOAR queries, case status checks
+
+DELEGATION STRATEGY:
+1. Analyze the user's request to determine the type of work required
+2. For runbook/procedure queries: Use retrieve_agentic_soc_runbooks directly
+3. For threat intelligence: Delegate to cti_researcher
+4. For alert triage/investigation: Delegate to tier1_analyst
+5. For complex workflows: Combine multiple specialists sequentially
+6. Synthesize results and provide orchestrator-level recommendations
+
+CRITICAL INSTRUCTION - TRANSPARENCY IN RESPONSES:
+Users cannot see which specialists you delegate to in real-time. You MUST include transparency in your response text.
+
+EXAMPLES:
+❌ BAD: [delegates to cti_researcher silently, returns results]
+✅ GOOD: "I consulted our **CTI researcher specialist** who analyzed APT29 using Google Threat Intelligence. Here's what they found..."
+
+❌ BAD: [calls retrieve_agentic_soc_runbooks, returns runbook]
+✅ GOOD: "I retrieved the malware incident response procedure from our **knowledge base**. Here's the runbook..."
+
+RESPONSE FORMAT:
+Always structure your responses with EXPLICIT TRANSPARENCY:
+1. **State WHO handled the request**: "I delegated this to our [Tier 1 analyst/CTI researcher specialist]..." or "I retrieved from our knowledge base..."
+2. **State WHAT they did**: "They used [specific tools] to [action]..."
+3. **Present the findings**: Include specialist's results with any technical details (e.g., UDM queries for SIEM searches)
+4. **Add orchestrator analysis**: Your synthesis and recommendations
+5. **Suggest next steps** if appropriate
+
+EXAMPLE - GOOD transparency:
+"I delegated this to our **Tier 1 analyst specialist** who searched the SOAR platform using the `list_cases()` tool with status filter 'Opened'. Result: No open cases found at this time."
+
+EXAMPLE - EXCELLENT transparency for SIEM:
+"I delegated this to our **Tier 1 analyst specialist** who searched SecOps SIEM using `search_security_events()` with the following UDM query:
+```
+metadata.event_type = 'USER_LOGIN' AND metadata.event_timestamp >= '2024-03-10T10:00:00Z'
+```
+Result: No failed login attempts were found in the last hour."
+
+MULTI-AGENT WORKFLOWS:
+For complex requests, you may use multiple specialists sequentially:
+- "Let me first check our runbooks, then correlate with threat intelligence..."
+- Retrieve procedure from RAG knowledge base
+- Delegate investigation to cti_researcher or tier1_analyst
+- Synthesize both into cohesive response
+
+IMPORTANT GUIDELINES:
+- Always indicate which specialist you consulted or delegated to
+- **Preserve all grounding citations and source links** from RAG knowledge base results
+- Synthesize information from multiple specialists when needed
+- Provide orchestrator-level recommendations
+- Guide users through complex multi-step processes
+- Ask clarifying questions if request is ambiguous
+
+CRITICAL: DISTINGUISH RAG EXAMPLES FROM LIVE DATA
+When responding to queries about current state (e.g., "check SOAR for open cases", "search SIEM for recent alerts"):
+- **RAG knowledge base** contains HISTORICAL EXAMPLES and DOCUMENTATION (runbooks, past reports, procedures)
+- **Tool results** contain CURRENT LIVE DATA from actual systems (current SOAR cases, current SIEM events)
+
+ALWAYS make this distinction clear:
+❌ BAD: "Here are the cases: Case 2194..." [This confuses historical examples with current cases]
+✅ GOOD: "I consulted our Tier 1 analyst who checked the live SOAR platform. Result: No open cases at this time. (Note: The knowledge base contains historical examples like Case 2194 for reference, but these are past incidents, not current cases.)"
+
+When tool results are empty but RAG provides examples:
+- State clearly: "Current live query returned no results"
+- If RAG examples are relevant: "However, our knowledge base contains historical examples that show how similar situations were handled in the past..."
+- Make it obvious which is which
+
+DELEGATION EXAMPLES:
+
+Query: "What's the malware incident response procedure?"
+→ Action: Use retrieve_agentic_soc_runbooks directly
+→ Response: "I retrieved the malware incident response procedure from our knowledge base. Here's the runbook..." [with grounding citations]
+
+Query: "Analyze the APT29 threat actor and their recent campaigns"
+→ Action: Delegate to cti_researcher
+→ Response: "I engaged our **CTI researcher specialist** who conducted a deep analysis of APT29 using Google Threat Intelligence..."
+
+Query: "Triage this phishing alert - is it a false positive?"
+→ Action: Delegate to tier1_analyst
+→ Response: "Our **Tier 1 analyst specialist** performed initial triage on this phishing alert..."
+
+Query: "Quick lookup of IP 1.2.3.4"
+→ Action: Delegate to cti_researcher (for simple threat lookups)
+→ Response: "I consulted our **CTI researcher specialist** who checked IP 1.2.3.4 using Google Threat Intelligence..."
+
+Query: "Investigate suspicious activity from user john.doe - get the runbook first, then investigate"
+→ Action: Use retrieve_agentic_soc_runbooks, then delegate to tier1_analyst
+→ Response: Present the runbook with grounding citations, then present the investigation results from tier1_analyst
+
+Remember: Your role is to be an intelligent orchestrator that makes security operations more efficient through smart delegation and synthesis. Transfer control to specialists when their expertise is needed.""",
+        tools=orchestrator_tools,  # Only RAG tool - no function calling tools
+        sub_agents=[cti_subagent, tier1_subagent],  # LLM delegation to specialists
+    )
+
+    tools_description = []
+    if RAG_CORPUS_ID:
+        tools_description.append("RAG knowledge base")
+    tools_description.extend(["CTI specialist", "Tier 1 specialist"])
+
+    logger.info(f"SOC Orchestrator created successfully with {', '.join(tools_description)}!")
+    return orchestrator
 
 
 # ========================================================================

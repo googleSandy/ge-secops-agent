@@ -12,13 +12,14 @@ import logging
 import os
 import re
 import sys
+import typing
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
 import typer
 import vertexai
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 from google.api_core import client_options
 from google.cloud import aiplatform
 from google.cloud.aiplatform_v1beta1 import (
@@ -26,6 +27,9 @@ from google.cloud.aiplatform_v1beta1 import (
     ListReasoningEnginesRequest,
     ReasoningEngineServiceClient,
 )
+
+# Added AgentSpaceManager for synchronized UI purges
+from installation_scripts.manage_agentspace import AgentSpaceManager
 from vertexai import agent_engines
 from vertexai.preview.reasoning_engines import AdkApp
 
@@ -440,6 +444,13 @@ class AgentEngineManager:
                 typer.secho(f" Error listing engines: {e}", fg=typer.colors.RED)
             return []
 
+    def get_agents_by_display_name(self, display_name: str) -> list[dict]:
+        """
+        Find all Agent Engine instances with a specific display name.
+        """
+        agents = self.list_agents(verbose=False)
+        return [a for a in agents if a.get("display_name") == display_name]
+
     def delete_agent(self, resource_name: str, force: bool = False) -> bool:
         """
         Delete a specific Agent Engine instance.
@@ -555,15 +566,15 @@ class AgentEngineManager:
             load_dotenv(self.env_file, override=True)
 
             # Validate required environment variables
+            # Note: CHRONICLE_SERVICE_ACCOUNT_PATH is optional if CHRONICLE_SERVICE_ACCOUNT_SECRET is set
             required_vars = [
                 "GCP_PROJECT_ID",
                 "GCP_LOCATION",
                 "GCP_STAGING_BUCKET",
                 "CHRONICLE_PROJECT_ID",
                 "CHRONICLE_CUSTOMER_ID",
-                "CHRONICLE_SERVICE_ACCOUNT_PATH",
                 "SOAR_URL",
-                "SOAR_API_KEY",
+                "SOAR_APP_KEY",
                 "GTI_API_KEY",
                 "RAG_CORPUS_ID",
             ]
@@ -574,6 +585,23 @@ class AgentEngineManager:
                 typer.secho(" Configuration Error", fg=typer.colors.RED, bold=True)
                 typer.echo()
                 typer.echo(format_validation_errors(errors))
+                return None
+
+            # Validate service account configuration (either secret or file path required)
+            has_secret = bool(os.environ.get("CHRONICLE_SERVICE_ACCOUNT_SECRET"))
+            has_path = bool(os.environ.get("CHRONICLE_SERVICE_ACCOUNT_PATH"))
+
+            if not has_secret and not has_path:
+                typer.secho(" Configuration Error", fg=typer.colors.RED, bold=True)
+                typer.echo()
+                typer.echo("Either CHRONICLE_SERVICE_ACCOUNT_SECRET or CHRONICLE_SERVICE_ACCOUNT_PATH must be set")
+                typer.echo()
+                typer.echo("Option 1 (Recommended): Use Secret Manager")
+                typer.echo("  1. Upload SA file: python installation_scripts/upload_secret.py upload")
+                typer.echo("  2. Add to .env: CHRONICLE_SERVICE_ACCOUNT_SECRET=projects/PROJECT/secrets/SECRET/versions/latest")
+                typer.echo()
+                typer.echo("Option 2 (Legacy): Use local file")
+                typer.echo("  Add to .env: CHRONICLE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json")
                 return None
 
             # Validate RAG_CORPUS_ID format
@@ -606,11 +634,24 @@ class AgentEngineManager:
                 staging_bucket=GCP_STAGING_BUCKET,
             )
 
-            # Copy service account file to where MCP server expects it
+            # Handle Chronicle service account authentication
+            # Priority: Secret Manager > Local File
+            CHRONICLE_SERVICE_ACCOUNT_SECRET = os.environ.get(
+                "CHRONICLE_SERVICE_ACCOUNT_SECRET"
+            )
             CHRONICLE_SERVICE_ACCOUNT_PATH = os.environ.get(
                 "CHRONICLE_SERVICE_ACCOUNT_PATH"
             )
-            if CHRONICLE_SERVICE_ACCOUNT_PATH:
+
+            if CHRONICLE_SERVICE_ACCOUNT_SECRET:
+                typer.secho(
+                    "Using Secret Manager for service account authentication",
+                    fg=typer.colors.GREEN
+                )
+                typer.echo(f"  Secret: {CHRONICLE_SERVICE_ACCOUNT_SECRET}")
+                # No file copying needed - MCP server will read from Secret Manager
+                use_secret_manager = True
+            elif CHRONICLE_SERVICE_ACCOUNT_PATH:
                 # Validate the service account file path exists and is not a placeholder
                 file_error = validate_file_path_exists(
                     "CHRONICLE_SERVICE_ACCOUNT_PATH", CHRONICLE_SERVICE_ACCOUNT_PATH
@@ -621,15 +662,25 @@ class AgentEngineManager:
                     typer.echo(format_validation_errors([file_error]))
                     return None
 
+                typer.secho(
+                    "Using local file for service account authentication (legacy mode)",
+                    fg=typer.colors.YELLOW
+                )
+                typer.echo(f"  Path: {CHRONICLE_SERVICE_ACCOUNT_PATH}")
                 dest_dir = Path("./mcp-security/server/secops/secops_mcp/")
                 dest_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy(CHRONICLE_SERVICE_ACCOUNT_PATH, dest_dir)
                 typer.echo("Copied service account file for Chronicle MCP server")
+                use_secret_manager = False
             else:
-                raise ValueError("CHRONICLE_SERVICE_ACCOUNT_PATH is not set")
+                raise ValueError(
+                    "Either CHRONICLE_SERVICE_ACCOUNT_SECRET or CHRONICLE_SERVICE_ACCOUNT_PATH must be set"
+                )
 
             # Dynamically import and create the agent from the specified module
             typer.echo(f"Importing agent from {agent_module}...")
+            os.environ["REASONING_ENGINE_DEPLOYMENT"] = "True"
+            # Allow Vertex AI init - agents need it to use Vertex AI models instead of genai client
             try:
                 agent_pkg = importlib.import_module(agent_module)
                 create_agent_func = agent_pkg.create_agent
@@ -655,38 +706,59 @@ class AgentEngineManager:
                 agent=agent,
                 enable_tracing=True,
             )
-
             # Get environment variables for deployment
+            # HYBRID APPROACH:
+            # - RAG sub-agent uses Vertex AI (initialized in agent code)
+            # - Other agents use Gemini API key (no location restrictions!)
             env_vars = {
                 "CHRONICLE_PROJECT_ID": os.environ.get("CHRONICLE_PROJECT_ID"),
                 "CHRONICLE_CUSTOMER_ID": os.environ.get("CHRONICLE_CUSTOMER_ID"),
                 "CHRONICLE_REGION": os.environ.get("CHRONICLE_REGION", "us"),
-                "GOOGLE_GENAI_USE_VERTEXAI": os.environ.get(
-                    "GCP_VERTEXAI_ENABLED", "True"
-                ),
-                "LOCATION": os.environ.get("GCP_LOCATION"),
-                "GCP_LOCATION": os.environ.get("GCP_LOCATION"),  # testing
+                "GCP_VERTEXAI_ENABLED": os.environ.get("GCP_VERTEXAI_ENABLED", "True"),
                 "PROJECT_ID": os.environ.get("GCP_PROJECT_ID"),
                 "GCP_PROJECT_ID": os.environ.get("GCP_PROJECT_ID"),
-                "RAG_CORPUS": os.environ.get("RAG_CORPUS_ID"),
-                "RAG_CORPUS_ID": os.environ.get("RAG_CORPUS_ID"),  # testing
+                "GCP_LOCATION": os.environ.get("GCP_LOCATION", "us-central1"),
+                "GCP_STAGING_BUCKET": os.environ.get("GCP_STAGING_BUCKET"),
+                "RAG_CORPUS_ID": os.environ.get("RAG_CORPUS_ID"),
                 "SOAR_URL": os.environ.get("SOAR_URL"),
-                "SOAR_APP_KEY": os.environ.get("SOAR_API_KEY"),
+                "SOAR_APP_KEY": os.environ.get("SOAR_APP_KEY"),
                 "VT_APIKEY": os.environ.get("GTI_API_KEY"),
+                # API keys excluded - deployed agent uses Vertex AI ambient credentials
+                # Gemini 3.x workaround: Route model calls to global endpoint
+                # See: https://github.com/google/adk-python/issues/3628
+                "GOOGLE_CLOUD_LOCATION": "global",
+                "GOOGLE_GENAI_USE_VERTEXAI": "TRUE",
             }
+
+            # Add service account configuration based on authentication method
+            if use_secret_manager:
+                # Use Secret Manager - pass secret resource name
+                env_vars["CHRONICLE_SERVICE_ACCOUNT_SECRET"] = CHRONICLE_SERVICE_ACCOUNT_SECRET
+            else:
+                # Use local file - pass filename only (file already copied to package)
+                sa_filename = Path(CHRONICLE_SERVICE_ACCOUNT_PATH).name
+                env_vars["SECOPS_SA_PATH"] = sa_filename
+
 
             # Determine display name based on agent module
             if agent_module == "soc_agent_flash":
-                display_name = "SOC Agent - Flash"
+                display_name = "SecOps Security Agent - Flash"
             elif agent_module == "soc_agent":
-                display_name = "SOC Agent - Pro"
+                display_name = "SecOps Security Agent - Orchestrator"
             elif agent_module == "soc_agent_tier1":
-                display_name = "SOC Agent - Tier 1 Analyst"
+                display_name = "SecOps Security Agent - Tier 1"
             elif agent_module == "soc_agent_cti":
-                display_name = "SOC Agent - CTI Researcher"
+                display_name = "SecOps Security Agent - CTI"
             else:
                 # For any future agent modules, use the module name as-is
-                display_name = f"SOC Agent - {agent_module}"
+                display_name = f"SecOps Security Agent - {agent_module}"
+
+            # Ensure we do not break Gemini Enterprise Proxy UI Schemas natively generating '500 Server Errors'
+            typer.echo("Configuring Workspace Endpoint Schema Compatibility Profile...")
+            for key in dict(app.__dict__).keys():
+                if key.startswith("async_"):
+                    # Hide the property from the Pydantic type reflector natively using primitive bindings
+                    app.__dict__[key] = "Schema Compatibility Shadow Wrapper"
 
             # Deploy the agent engine
             typer.echo(f"Deploying agent engine to Vertex AI as '{display_name}'...")
@@ -695,17 +767,36 @@ class AgentEngineManager:
                 display_name=display_name,
                 requirements=[
                     "cloudpickle",
-                    "google-adk~=1.18.0",
-                    "google-cloud-aiplatform[agent-engines]~=1.127.0",
+                    "google-adk~=1.26.0",
+                    "google-cloud-aiplatform[agent-engines]~=1.140.0",
                     "pydantic",
                     "python-dotenv",
+                    "httpx>=0.28.1",
+                    "mcp[cli]>=1.4.1",
+                    "secops>=0.18.0",
+                    "google-auth>=2.38.0",
+                    "google-auth-httplib2>=0.2.0",
+                    "google-api-python-client>=2.164.0",
+                    "aiohttp>=3.11.15",
+                    "vt-py",
+                    "typing-extensions>=4.8.0",
+                    "google-cloud-securitycenter>=1.38.0",
+                    "google-cloud-asset>=3.15.0",
+                    "google-cloud-secret-manager>=2.16.0",  # For Secret Manager access
                 ],
                 build_options={
                     "installation_scripts": ["installation_scripts/install.sh"]
                 },
                 extra_packages=[
-                    "mcp-security/server",
-                    "installation_scripts/install.sh",  # installs uvx
+                    "installation_scripts/install.sh",  # installs MCP server packages
+                    "soc_agent",
+                    "soc_agent_flash",
+                    "soc_agent_tier1",
+                    "soc_agent_cti",
+                    "mcp-security/server/secops",
+                    "mcp-security/server/secops-soar",
+                    "mcp-security/server/gti",
+                    "mcp-security/server/scc"
                 ],
                 env_vars=env_vars,
             )
@@ -761,7 +852,7 @@ class AgentEngineManager:
 
         events = []
         test_message = (
-            "Search RAG Corpus for Malware IRP runbook and get the objective."
+            "Can you check our SOAR case management system to see if we have any currently open security cases that might relate to APT29?"
         )
         # test_message = "List rules with ursnif in the name."
         # test_message = "List the first page of soar cases."
@@ -1062,7 +1153,123 @@ def create(
             resource_name.split("/")[-1] if "/" in resource_name else resource_name
         )
         typer.echo(f"AGENT_ENGINE_ID={engine_id}")
+        
+        # Write back to .env automatically
+        try:
+            target_env = manager.env_file
+            if target_env.exists():
+                set_key(str(target_env), "AGENT_ENGINE_RESOURCE_NAME", resource_name)
+                set_key(str(target_env), "AGENT_ENGINE_ID", engine_id)
+                typer.secho("\n Automatically updated .env with new agent coordinates!", fg=typer.colors.GREEN)
+        except Exception as e:
+            typer.secho(f"\n Failed to auto-update .env: {e}", fg=typer.colors.YELLOW)
+            
     else:
+        raise typer.Exit(code=1)
+
+@app.command()
+def deploy(
+    agent_module: Annotated[
+        str,
+        typer.Option(
+            "--agent-module", 
+            "-a", 
+            help="Agent module to deploy (e.g., 'soc_agent', 'soc_agent_flash')"
+        ),
+    ] = "soc_agent",
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Enable debug mode with verbose logging")
+    ] = False,
+    no_test: Annotated[
+        bool, typer.Option("--no-test", help="Skip automatic test after creation")
+    ] = False,
+    env_file: Annotated[
+        Path, typer.Option(help="Path to the environment file.")
+    ] = Path(".env"),
+) -> None:
+    """Intelligently deploy a new Agent Engine instance and cleanup older versions."""
+    typer.echo("\n" + "=" * 80)
+    typer.secho("Intelligent Deployment (Build & Replace)", fg=typer.colors.MAGENTA, bold=True)
+    typer.echo("=" * 80 + "\n")
+
+    manager = AgentEngineManager(env_file)
+    
+    # Determine what the display name will be so we can find orphans later
+    if agent_module == "soc_agent_flash":
+        display_name = "SecOps Security Agent - Flash"
+    elif agent_module == "soc_agent":
+        display_name = "SecOps Security Agent - Orchestrator"
+    elif agent_module == "soc_agent_tier1":
+        display_name = "SecOps Security Agent - Tier 1"
+    elif agent_module == "soc_agent_cti":
+        display_name = "SecOps Security Agent - CTI"
+    else:
+        display_name = f"SecOps Security Agent - {agent_module}"
+        
+    typer.echo(f"Targeting logic for: {display_name}")
+    
+    # Find existing agents
+    orphans = manager.get_agents_by_display_name(display_name)
+    if orphans:
+        typer.secho(f"Found {len(orphans)} existing '{display_name}' instances.", fg=typer.colors.YELLOW)
+    else:
+        typer.secho("No existing instances found. Proceeding with fresh build.", fg=typer.colors.GREEN)
+        
+    # Create the new agent
+    typer.echo("\n--- Phase 1: Building New Engine ---")
+    resource_name = manager.create_agent(agent_module, debug, no_test)
+    
+    if resource_name:
+        typer.echo("\n--- Phase 2: Updating Environment ---")
+        engine_id = resource_name.split("/")[-1] if "/" in resource_name else resource_name
+        
+        try:
+            target_env = manager.env_file
+            if target_env.exists():
+                set_key(str(target_env), "AGENT_ENGINE_RESOURCE_NAME", resource_name)
+                set_key(str(target_env), "AGENT_ENGINE_ID", engine_id)
+                typer.secho(f"Successfully bound .env to -> {engine_id}", fg=typer.colors.GREEN)
+        except Exception as e:
+            typer.secho(f"Warning: Failed to auto-update .env: {e}", fg=typer.colors.YELLOW)
+
+        # Cleanup old agents (Vertex + AgentSpace UI)
+        if orphans:
+            typer.echo("\n--- Phase 3: Garbage Collection ---")
+            # 1. Purge Vertex AI containers
+            for orphan in orphans:
+                if orphan["resource_name"] != resource_name:
+                    typer.secho(f"Deleting stale engine: {orphan['resource_name']}", fg=typer.colors.YELLOW)
+                    manager.delete_agent(orphan["resource_name"], force=True)
+            
+            # 2. Unlink AgentSpace UI proxies implicitly
+            try:
+                typer.echo("\n--- Phase 4: Validating Workspace UI Proxies ---")
+                ui_manager = AgentSpaceManager(env_file)
+                proxy_agents = ui_manager.list_agents(show_raw=False)
+                
+                # AgentSpace uses a different display name than Vertex AI natively
+                proxy_display_name = ui_manager.env_vars.get("AGENT_DISPLAY_NAME", "SecOps Security Agent")
+                
+                if proxy_agents:
+                    for proxy in proxy_agents:
+                        # Unlink proxies matching our exact displayName that do NOT match the one we are actively writing
+                        if proxy.get("displayName") == proxy_display_name:
+                            proxy_id = proxy.get("name", "").split("/")[-1]
+                            
+                            # Never nuke the active .env proxy!
+                            if proxy_id != ui_manager.env_vars.get("AGENTSPACE_AGENT_ID"):
+                                typer.secho(f"Unlinking stale Workspace Proxy: {proxy_id}", fg=typer.colors.YELLOW)
+                                ui_manager.unlink_agent_from_agentspace(agent_id=proxy_id, force=True)
+            except Exception as e:
+                typer.secho(f"Warning: Failed to clean AgentSpace workspace proxies implicitly: {e}", fg=typer.colors.YELLOW)
+                
+            typer.secho("\n Garbage collection complete!", fg=typer.colors.GREEN)
+            
+        typer.echo("\n" + "=" * 80)
+        typer.secho("INTELLIGENT DEPLOYMENT COMPLETE", fg=typer.colors.GREEN, bold=True)
+        typer.echo("=" * 80)
+    else:
+        typer.secho("\nDeployment failed during Phase 1. Aborting garbage collection.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
 
