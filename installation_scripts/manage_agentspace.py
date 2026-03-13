@@ -54,7 +54,26 @@ class AgentSpaceManager:
         """
         self.env_file = env_file
         self.env_vars = self._load_env_vars()
-        self.creds, self.project = google.auth.default()
+
+        # Initialize credentials with proper scopes for Discovery Engine API
+        service_account_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+        if service_account_path:
+            # Use service account with explicit scopes
+            from google.oauth2 import service_account
+            self.creds = service_account.Credentials.from_service_account_file(
+                service_account_path,
+                scopes=['https://www.googleapis.com/auth/cloud-platform']
+            )
+            # Extract project from service account file
+            import json
+            with open(service_account_path) as f:
+                sa_info = json.load(f)
+                self.project = sa_info.get('project_id')
+        else:
+            # Fall back to default credentials
+            self.creds, self.project = google.auth.default(
+                scopes=['https://www.googleapis.com/auth/cloud-platform']
+            )
 
     def _load_env_vars(self) -> dict[str, str]:
         """Load environment variables from the .env file using python-dotenv."""
@@ -135,9 +154,9 @@ class AgentSpaceManager:
         }
         headers.update(kwargs.pop("headers", {}))
 
-        # Add default timeout if not specified (60 seconds)
+        # Add default timeout if not specified (600 seconds)
         if "timeout" not in kwargs:
-            kwargs["timeout"] = 60
+            kwargs["timeout"] = 600
 
         # Debug output
         debug = self.env_vars.get("DEBUG", "").lower() in ["true", "1", "yes"]
@@ -196,11 +215,11 @@ class AgentSpaceManager:
         """Build the agent configuration payload."""
         config = {
             "displayName": self.env_vars.get(
-                "AGENT_DISPLAY_NAME", "Google Security Agent"
+                "AGENT_DISPLAY_NAME", "SecOps Security Agent"
             ),
             "description": self.env_vars.get(
                 "AGENT_DESCRIPTION",
-                "Allows security operations on Google Security Products",
+                "Security Operations agent with access to Google SecOps (Chronicle SIEM), SOAR, and Google Threat Intelligence",
             ),
             "adk_agent_definition": {
                 "tool_settings": {
@@ -1153,13 +1172,13 @@ class AgentSpaceManager:
 
                 typer.echo()
 
-            return True
+            return agents
 
         except requests.exceptions.RequestException as e:
             typer.echo(f"Error listing agents: {e}", err=True)
             if hasattr(e.response, "text"):
                 typer.echo(f"Response: {e.response.text}", err=True)
-            return False
+            return []
 
     def get_app_details(self, app_id: str) -> bool:
         """
@@ -1535,8 +1554,8 @@ def list_agents(
 ) -> None:
     """List all agents in the AgentSpace app."""
     manager = AgentSpaceManager(env_file)
-    if not manager.list_agents(show_raw=raw):
-        raise typer.Exit(code=1)
+    # the cli just prints the results and ignores the returned list
+    manager.list_agents(show_raw=raw)
 
 
 @app.command()

@@ -30,7 +30,7 @@ PLACEHOLDER_PATTERNS = {
     "CHRONICLE_CUSTOMER_ID": ["your-customer-uuid"],
     "CHRONICLE_SERVICE_ACCOUNT_PATH": ["/path/to/service-account.json"],
     "SOAR_URL": ["https://your-instance.siemplify-soar.com:443"],
-    "SOAR_API_KEY": ["your-soar-api-key"],
+    "SOAR_APP_KEY": ["your-soar-api-key"],
     "GTI_API_KEY": ["your-virustotal-api-key"],
     "RAG_CORPUS_ID": [
         "projects/your-project-id/locations/us-central1/ragCorpora/1234567890"

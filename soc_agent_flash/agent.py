@@ -33,15 +33,15 @@ See PR #25 discussion for additional context on this architectural decision.
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 import vertexai
 from dotenv import load_dotenv
 from google.adk.agents import Agent
-from google.adk.tools import AgentTool, google_search
+from google.adk.tools import google_search
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
-from google.adk.tools.retrieval.vertex_ai_rag_retrieval import VertexAiRagRetrieval
 from mcp import StdioServerParameters
 from vertexai.preview import rag
 
@@ -50,6 +50,57 @@ from vertexai.preview import rag
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+
+
+
+
+
+
+
+class DynamicMcpToolset(McpToolset):
+    mcp_module: str = ""
+    target_env: dict = {}
+    _is_dynamic_initialized: bool = False
+    
+    def __init__(self, mcp_module: str, target_env: dict, **kwargs):
+        from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
+        from mcp.client.stdio import StdioServerParameters
+        
+        # Deploy a placeholder structure that the ADK will serialize natively
+        dummy_params = StdioConnectionParams(
+            server_params=StdioServerParameters(command="python3", args=["-m", mcp_module], env={}), timeout=60000
+        )
+        # CRITICAL: Suppress errlog default injection (`sys.stderr` Stream) to permit serialization
+        super().__init__(connection_params=dummy_params, errlog=None, **kwargs)
+        self.mcp_module = mcp_module
+        self.target_env = target_env
+        self._is_dynamic_initialized = False
+        
+    async def get_tools(self, readonly_context=None) -> list:
+        if not getattr(self, "_is_dynamic_initialized", False):
+            from mcp.client.stdio import StdioServerParameters
+            import os, sys
+            
+            # The exact container execution environment
+            container_env = dict(os.environ)
+            container_env["PYTHONPATH"] = ":".join(sys.path) + ":mcp-security/server/secops:mcp-security/server/secops-soar:mcp-security/server/gti:mcp-security/server/scc"
+            
+            for k, v in self.target_env.items():
+                if v is not None:
+                    container_env[k] = v
+                    
+            # Overwrite the payload natively substituting the explicit system binary path
+            self._connection_params.server_params = StdioServerParameters(
+                command=sys.executable,
+                args=["-m", self.mcp_module],
+                env=container_env
+            )
+            # CRITICAL: Overwrite the privately cached copy housed inside the Session Manager
+            self._mcp_session_manager._connection_params = self._connection_params
+            
+            self._is_dynamic_initialized = True
+        return await super().get_tools(readonly_context)
 
 def create_agent():
     """
@@ -113,7 +164,7 @@ def create_agent():
 
     # SOAR configuration
     SOAR_URL = os.environ.get("SOAR_URL")
-    SOAR_API_KEY = os.environ.get("SOAR_API_KEY")
+    SOAR_APP_KEY = os.environ.get("SOAR_APP_KEY")
 
     # Google Threat Intelligence configuration
     GTI_API_KEY = os.environ.get("GTI_API_KEY")
@@ -152,30 +203,21 @@ def create_agent():
     # Initialize list to collect all tools
     tools = []
 
+    # Vertex AI extracts `extra_packages` to the container working directory natively
+    CONTAINER_PYTHONPATH = "mcp-security/server/secops:mcp-security/server/secops-soar:mcp-security/server/gti:mcp-security/server/scc"
+
     # ========================================================================
     # Configure Chronicle/SIEM MCP Tool
     # ========================================================================
     logger.info("Configuring Chronicle/SIEM tools...")
-    secops_siem_tools = McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command="uv",
-                args=[
-                    "--directory",
-                    "./mcp-security/server/secops/secops_mcp",
-                    "run",
-                    "server.py",
-                ],
-                env={
-                    "CHRONICLE_PROJECT_ID": CHRONICLE_PROJECT_ID,
-                    "CHRONICLE_CUSTOMER_ID": CHRONICLE_CUSTOMER_ID,
-                    "CHRONICLE_REGION": CHRONICLE_REGION,
-                    "SECOPS_SA_PATH": service_account_filename,
-                },
-            ),
-            timeout=60000,
-        ),
-        errlog=None,
+    secops_siem_tools = DynamicMcpToolset(
+        mcp_module="secops_mcp.server",
+        target_env={
+            "CHRONICLE_PROJECT_ID": CHRONICLE_PROJECT_ID,
+            "CHRONICLE_CUSTOMER_ID": CHRONICLE_CUSTOMER_ID,
+            "CHRONICLE_REGION": CHRONICLE_REGION,
+            "SECOPS_SA_PATH": service_account_filename,
+        }
     )
     tools.append(secops_siem_tools)
 
@@ -183,24 +225,12 @@ def create_agent():
     # Configure SOAR MCP Tool
     # ========================================================================
     logger.info("Configuring SOAR tools...")
-    secops_soar_tools = McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command="uv",
-                args=[
-                    "--directory",
-                    "./mcp-security/server/secops-soar/secops_soar_mcp",
-                    "run",
-                    "server.py",
-                ],
-                env={
-                    "SOAR_URL": SOAR_URL,
-                    "SOAR_APP_KEY": SOAR_API_KEY,  # MCP server expects SOAR_APP_KEY
-                },
-            ),
-            timeout=60000,
-        ),
-        errlog=None,
+    secops_soar_tools = DynamicMcpToolset(
+        mcp_module="secops_soar_mcp.server",
+        target_env={
+            "SOAR_URL": SOAR_URL,
+            "SOAR_APP_KEY": SOAR_APP_KEY,
+        }
     )
     tools.append(secops_soar_tools)
 
@@ -208,21 +238,11 @@ def create_agent():
     # Configure Google Threat Intelligence (GTI) MCP Tool
     # ========================================================================
     logger.info("Configuring GTI tools...")
-    gti_tools = McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command="uv",
-                args=[
-                    "--directory",
-                    "./mcp-security/server/gti/gti_mcp",
-                    "run",
-                    "server.py",
-                ],
-                env={"VT_APIKEY": GTI_API_KEY},  # MCP server expects VT_APIKEY
-            ),
-            timeout=60000,
-        ),
-        errlog=None,
+    gti_tools = DynamicMcpToolset(
+        mcp_module="gti_mcp.server",
+        target_env={
+            "VT_APIKEY": GTI_API_KEY,
+        }
     )
     tools.append(gti_tools)
 
@@ -230,16 +250,9 @@ def create_agent():
     # Configure Security Command Center (SCC) MCP Tool
     # ========================================================================
     logger.info("Configuring SCC tools...")
-    scc_tools = McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command="uv",
-                args=["--directory", "./mcp-security/server/scc", "run", "scc_mcp.py"],
-                env={},
-            ),
-            timeout=60000,
-        ),
-        errlog=None,
+    scc_tools = DynamicMcpToolset(
+        mcp_module="scc_mcp",
+        target_env={}
     )
     tools.append(scc_tools)
 
@@ -248,23 +261,39 @@ def create_agent():
     # ========================================================================
     if RAG_CORPUS_ID:
         logger.info(f"Configuring RAG retrieval with corpus: {RAG_CORPUS_ID}")
-        ask_vertex_retrieval = VertexAiRagRetrieval(
-            name="retrieve_agentic_soc_runbooks",
-            description=(
-                "Use this tool to retrieve IRPs, Runbooks, Common Steps, and Personas for the Agentic SOC."
-            ),
-            rag_resources=[rag.RagResource(rag_corpus=RAG_CORPUS_ID)],
-            similarity_top_k=RAG_SIMILARITY_TOP_K,
-            vector_distance_threshold=RAG_DISTANCE_THRESHOLD,
-        )
-        tools.append(ask_vertex_retrieval)
+        
+        def retrieve_agentic_soc_runbooks(query: str) -> str:
+            """Use this tool to retrieve IRPs, Runbooks, Common Steps, Procedure, guidelines, and Personas for the Agentic SOC.
+            
+            Args:
+                query: The search query to find relevant documentation in the RAG corpus.
+            """
+            try:
+                response = rag.retrieval_query(
+                    rag_resources=[rag.RagResource(rag_corpus=RAG_CORPUS_ID)],
+                    text=query,
+                    similarity_top_k=RAG_SIMILARITY_TOP_K,
+                    vector_distance_threshold=RAG_DISTANCE_THRESHOLD,
+                )
+                if not response.contexts or not response.contexts.contexts:
+                    return "No relevant documentation found in RAG corpus."
+                
+                # Format contexts into a single string
+                result_parts = []
+                for index, context in enumerate(response.contexts.contexts):
+                    result_parts.append(f"--- Document {index+1} ---\n{context.text}\n")
+                return "\n".join(result_parts)
+            except Exception as e:
+                return f"Error retrieving from RAG corpus: {str(e)}"
+                
+        tools.append(retrieve_agentic_soc_runbooks)
     else:
         logger.warning("RAG_CORPUS_ID not configured, skipping RAG retrieval tool")
 
     # ========================================================================
-    # Add google_search as an AgentTool
+    # Add google_search as a standalone tool
     # ========================================================================
-    tools.append(AgentTool(agent=google_search))
+    tools.append(google_search)
 
     # ========================================================================
     # Create the Agent with all configured tools
@@ -272,8 +301,8 @@ def create_agent():
     logger.info(f"Creating SOC Agent with {len(tools)} tools...")
 
     agent = Agent(
-        model="gemini-3.0-flash",
-        name="soc_assistant_flash_3",
+        model="gemini-2.5-flash",
+        name="soc_assistant_flash",
         description="Security Operations reasoning agent with access to Agentic SOC MCP tools and runbook search.",
         instruction="""You are a Security Operations assistant with comprehensive access to MCP security tools including RAG-based runbook and documentation retrieval.
 
@@ -297,7 +326,13 @@ KEY TOOLS:
 - GTI tools: Get threat intelligence
 - SCC tools: Cloud security findings
 
-Always provide actionable guidance combining documented procedures with live security data.""",
+Always provide actionable guidance combining documented procedures with live security data.
+
+CRITICAL INSTRUCTION - USER CONSENT FOR EXECUTION:
+When you retrieve a runbook or formulate a plan, you MUST summarize the standard operating procedure for the user, and then EXPLICITLY ask for their permission before executing the associated MCP tools. Do NOT execute the tools autonomously without asking first. End your response with a clear question like "Would you like for me to execute this playbook after your review?"
+
+CRITICAL INSTRUCTION - TOOL INTROSPECTION:
+If the user asks for a list of your tools, capabilities, or functions, you MUST introspect your own native function calling schema directly to answer. DO NOT query the RAG corpus for information about your own tools. You already have a native understanding of your `tools` array; rely strictly on that literal schema to describe what actions you can take.""",
         tools=tools,
     )
 

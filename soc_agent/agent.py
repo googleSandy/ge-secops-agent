@@ -191,6 +191,13 @@ def create_agent():
         "SOAR_APP_KEY": SOAR_APP_KEY or "",
         "VT_APIKEY": GTI_API_KEY or "",  # GTI uses VT_APIKEY
         "GCP_PROJECT_ID": GCP_PROJECT_ID or "",
+        # GTI caching configuration (latency optimization)
+        "GTI_CACHE_ENABLED": os.environ.get("GTI_CACHE_ENABLED", "True"),
+        "GTI_CACHE_FILE_TTL": os.environ.get("GTI_CACHE_FILE_TTL", "86400"),
+        "GTI_CACHE_IP_TTL": os.environ.get("GTI_CACHE_IP_TTL", "900"),
+        "GTI_CACHE_DOMAIN_TTL": os.environ.get("GTI_CACHE_DOMAIN_TTL", "1800"),
+        "GTI_CACHE_URL_TTL": os.environ.get("GTI_CACHE_URL_TTL", "1800"),
+        "GTI_CACHE_MAX_SIZE": os.environ.get("GTI_CACHE_MAX_SIZE", "1000"),
     }
 
     # Add Chronicle service account if available
@@ -265,7 +272,7 @@ def create_agent():
                     args=["-m", "gti_mcp.server"],
                     env=mcp_env
                 ),
-                timeout=120000  # 2 minutes for MCP server startup
+                timeout=90000  # 90 seconds (balanced timeout)
             ),
             errlog=None  # Suppress errlog to permit serialization
         )
@@ -280,7 +287,7 @@ def create_agent():
                     args=["-m", "secops_mcp.server"],
                     env=mcp_env
                 ),
-                timeout=120000
+                timeout=90000  # 90 seconds (balanced timeout)
             ),
             errlog=None  # Suppress errlog to permit serialization
         )
@@ -295,7 +302,7 @@ def create_agent():
                     args=["-m", "secops_soar_mcp.server"],
                     env=mcp_env
                 ),
-                timeout=120000
+                timeout=90000  # 90 seconds (balanced timeout)
             ),
             errlog=None  # Suppress errlog to permit serialization
         )
@@ -310,7 +317,7 @@ def create_agent():
                     args=["-m", "scc_mcp"],
                     env=mcp_env
                 ),
-                timeout=120000
+                timeout=90000  # 90 seconds (balanced timeout)
             ),
             errlog=None  # Suppress errlog to permit serialization
         )
@@ -318,7 +325,7 @@ def create_agent():
 
     cti_subagent = Agent(
         name="cti_researcher",
-        model="gemini-3.1-flash-preview",
+        model="gemini-3-flash-preview",
         description=CTI_PERSONA,
         instruction="""You are a Cyber Threat Intelligence (CTI) Researcher focused on proactive threat discovery, analysis, and intelligence production.
 
@@ -385,7 +392,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
                     args=["-m", "secops_mcp.server"],
                     env=mcp_env
                 ),
-                timeout=120000
+                timeout=90000  # 90 seconds (balanced timeout)
             ),
             errlog=None  # Suppress errlog to permit serialization
         )
@@ -400,7 +407,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
                     args=["-m", "secops_soar_mcp.server"],
                     env=mcp_env
                 ),
-                timeout=120000
+                timeout=90000  # 90 seconds (balanced timeout)
             ),
             errlog=None  # Suppress errlog to permit serialization
         )
@@ -415,7 +422,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
                     args=["-m", "gti_mcp.server"],
                     env=mcp_env
                 ),
-                timeout=120000
+                timeout=90000  # 90 seconds (balanced timeout)
             ),
             errlog=None  # Suppress errlog to permit serialization
         )
@@ -423,7 +430,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
 
     tier1_subagent = Agent(
         name="tier1_analyst",
-        model="gemini-3.1-flash-preview",
+        model="gemini-3-flash-preview",
         description=TIER1_PERSONA,
         instruction="""You are a Tier 1 SOC Analyst - the first line of defense in security operations.
 

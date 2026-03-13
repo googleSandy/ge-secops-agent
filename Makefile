@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help install setup clean check-prereqs check-deploy check-integration \
-	agent-engine-deploy agent-engine-deploy-and-delete agent-engine-test \
+	agent-engine-deploy agent-engine-deploy-and-delete agent-engine-test agent-engine-warmup \
 	agent-engine-list agent-engine-delete-by-index agent-engine-delete-by-resource agent-engine-redeploy \
 	agent-engine-logs \
 	agentspace-register agentspace-update agentspace-verify agentspace-delete \
@@ -16,7 +16,9 @@
 	vertex-ai-verify vertex-ai-enable-apis vertex-ai-quota \
 	oauth-setup oauth-create-auth oauth-verify oauth-delete \
 	secret-upload secret-upload-force secret-verify \
-	redeploy-all oauth-workflow full-deploy-with-oauth status cleanup check-env lint format
+	redeploy-all oauth-workflow full-deploy-with-oauth status cleanup check-env lint format \
+	eval eval-basic eval-cti eval-tier1 eval-multi \
+	profile-latency profile-latency-runs profile-latency-rag profile-latency-cti profile-latency-tier1
 
 # Default environment file
 ENV_FILE ?= .env
@@ -154,6 +156,9 @@ agent-engine-deploy-and-delete: check-prereqs ## Deploy agent engine and intelli
 
 agent-engine-test: check-deploy ## Test the deployed agent engine
 	$(PYTHON) $(MANAGE_AGENT_ENGINE) test
+
+agent-engine-warmup: check-deploy ## Pre-warm MCP server connections to reduce cold start latency
+	$(PYTHON) $(MANAGE_AGENT_ENGINE) warmup
 
 # AgentSpace management targets
 agentspace-register: check-integration ## Register agent with AgentSpace (use FORCE=1 to force re-register)
@@ -568,3 +573,36 @@ format: ## Format code (if available)
 	else \
 		echo "No formatter available (install ruff or black)"; \
 	fi
+
+# Evaluation targets
+eval: ## Run all agent evaluations
+	$(Q)echo "Running all evalsets..."
+	$(Q)$(PYTHON) -m google.adk.cli eval $(AGENT_MODULE) evalsets/
+
+eval-basic: ## Run basic operations evalset
+	$(Q)$(PYTHON) -m google.adk.cli eval $(AGENT_MODULE) evalsets/soc_basic.evalset.json
+
+eval-cti: ## Run CTI research evalset
+	$(Q)$(PYTHON) -m google.adk.cli eval $(AGENT_MODULE) evalsets/cti_research.evalset.json
+
+eval-tier1: ## Run Tier 1 triage evalset
+	$(Q)$(PYTHON) -m google.adk.cli eval $(AGENT_MODULE) evalsets/tier1_triage.evalset.json
+
+eval-multi: ## Run multi-specialist evalset
+	$(Q)$(PYTHON) -m google.adk.cli eval $(AGENT_MODULE) evalsets/multi_specialist.evalset.json
+
+# Latency profiling targets
+profile-latency: ## Profile agent latency (single run per query)
+	$(Q)$(PYTHON) test_scripts/profile_latency.py
+
+profile-latency-runs: ## Profile latency with multiple runs (use RUNS=N)
+	$(Q)$(PYTHON) test_scripts/profile_latency.py --runs $(or $(RUNS),3)
+
+profile-latency-rag: ## Profile RAG query latency only
+	$(Q)$(PYTHON) test_scripts/profile_latency.py --query-type rag
+
+profile-latency-cti: ## Profile CTI query latency only
+	$(Q)$(PYTHON) test_scripts/profile_latency.py --query-type cti
+
+profile-latency-tier1: ## Profile Tier 1 query latency only
+	$(Q)$(PYTHON) test_scripts/profile_latency.py --query-type tier1

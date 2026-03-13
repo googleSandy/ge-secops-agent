@@ -687,7 +687,7 @@ Edit `main.py` to customize:
 
 ```python
 # Change model
-model = "gemini-2.5-flash"  # or gemini-2.5-pro
+model = "gemini-3.1-flash-lite-preview"  # or gemini-3.1-pro-preview
 
 # Modify system prompt
 instruction = "Your custom security analyst instructions..."
@@ -800,7 +800,7 @@ make agentspace-test  # Test components
 Yes. All security tool integrations are optional.
 
 **What AI models are supported?**
-The default is gemini-2.5-flash but you can use any model suppored by Vertex AI Model Garden and ADK. Configure in `main.py`.
+The default is gemini-3.1-flash-lite-preview but you can use any model suppored by Vertex AI Model Garden and ADK. Configure in `main.py`.
 
 **How do I update the agent?**
 ```bash

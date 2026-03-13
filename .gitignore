@@ -1,6 +1,29 @@
+# Environment files
 .env
-venv
-installation_scripts/__pycache__/manage_agentspace.cpython-312.pyc
+.env.*
+!.env.example
+
+# Virtual environments
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# ADK cache
+.adk/
+
+# OS files
+.DS_Store
+
+# Development artifacts
+latency_profile_results.json
+
+# Local config
 GEMINI.md
-.env.ltstrtn
-.venv
+
+# Internal development (not for publishing)
+docs/
+test_scripts/

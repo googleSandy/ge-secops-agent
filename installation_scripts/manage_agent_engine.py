@@ -872,6 +872,75 @@ class AgentEngineManager:
                 fg=typer.colors.GREEN,
             )
 
+    def warmup_mcp_servers(self, resource_name: str) -> bool:
+        """
+        Pre-warm MCP server connections to reduce cold start latency.
+
+        This function sends simple queries that initialize connections to each MCP server:
+        - SOAR MCP (list_cases)
+        - GTI MCP (IP reputation check)
+        - Chronicle SIEM MCP (basic search)
+
+        Recommended to run after deployment or when agent has been idle.
+
+        Args:
+            resource_name: Resource name of the agent to warm up
+
+        Returns:
+            True if warmup successful, False otherwise
+        """
+        try:
+            typer.echo("\n" + "=" * 80)
+            typer.secho("MCP Connection Pre-Warming", fg=typer.colors.CYAN, bold=True)
+            typer.echo("=" * 80 + "\n")
+            typer.echo("Initializing MCP server connections to reduce cold start latency...")
+
+            # Get the agent
+            remote_app = agent_engines.get(resource_name)
+
+            # Run async warmup
+            asyncio.run(self._async_warmup_mcp(remote_app))
+            return True
+
+        except Exception as e:
+            typer.secho(f" Error warming up MCP servers: {e}", fg=typer.colors.RED)
+            return False
+
+    async def _async_warmup_mcp(self, remote_app):
+        """Async warmup function that exercises each MCP server."""
+        user_id = "warmup_user"
+        session = await remote_app.async_create_session(user_id=user_id)
+
+        # Warmup queries - each targets a different MCP server
+        # Using lightweight queries to ensure fast warmup
+        warmup_queries = [
+            ("List the first 3 SOAR cases", "SOAR MCP"),  # Lightweight - first page of cases
+            ("Check IP reputation 8.8.8.8", "GTI MCP"),  # Single IP lookup (cached after first call)
+            ("What tools are available in Chronicle SIEM?", "Chronicle SIEM MCP"),  # Tool discovery, no data query
+        ]
+
+        for query, target_mcp in warmup_queries:
+            typer.echo(f"\nWarming up {target_mcp}...")
+            typer.echo(f"  Query: {query}")
+
+            try:
+                event_count = 0
+                async for event in remote_app.async_stream_query(
+                    user_id=user_id, session_id=session.get("id"), message=query
+                ):
+                    event_count += 1
+                    # Silently consume events - we just want to trigger MCP connections
+
+                typer.secho(f"  ✓ {target_mcp} warmed up ({event_count} events)", fg=typer.colors.GREEN)
+            except Exception as e:
+                typer.secho(f"  Warning: {target_mcp} warmup failed: {e}", fg=typer.colors.YELLOW)
+                # Continue with other warmup queries even if one fails
+
+        typer.echo("\n" + "=" * 80)
+        typer.secho("MCP Pre-Warming Complete", fg=typer.colors.GREEN, bold=True)
+        typer.echo("=" * 80)
+        typer.echo("Next requests should have reduced cold start latency.")
+
     def inspect_agent(self, resource_name: str, verbose: bool = False) -> bool:
         """
         Inspect a deployed Agent Engine to see its configuration and service account details.
@@ -1324,6 +1393,61 @@ def test(
         resource = agents[index - 1]["resource_name"]
 
     success = manager.test_agent_with_resource(resource)
+    if not success:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def warmup(
+    resource: Annotated[
+        str | None,
+        typer.Option(
+            "--resource", "-r", help="Full resource name of the agent to warm up"
+        ),
+    ] = None,
+    index: Annotated[
+        int | None,
+        typer.Option("--index", "-i", help="Index of the agent from the list to warm up"),
+    ] = None,
+    env_file: Annotated[
+        Path, typer.Option(help="Path to the environment file.")
+    ] = Path(".env"),
+) -> None:
+    """Pre-warm MCP server connections to reduce cold start latency."""
+    if not resource and not index:
+        # Try to get from environment
+        manager = AgentEngineManager(env_file)
+        resource = manager.env_vars.get("AGENT_ENGINE_RESOURCE_NAME")
+        if not resource:
+            typer.secho(
+                " Error: Either --resource, --index, or AGENT_ENGINE_RESOURCE_NAME in .env must be provided",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+    if resource and index:
+        typer.secho(
+            " Error: Cannot specify both --resource and --index",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+
+    manager = AgentEngineManager(env_file)
+
+    if index:
+        # Get agent by index
+        agents = manager.list_agents(verbose=False)
+        if not agents:
+            raise typer.Exit(code=1)
+        if index < 1 or index > len(agents):
+            typer.secho(
+                f" Invalid index. Please choose between 1 and {len(agents)}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+        resource = agents[index - 1]["resource_name"]
+
+    success = manager.warmup_mcp_servers(resource)
     if not success:
         raise typer.Exit(code=1)
 

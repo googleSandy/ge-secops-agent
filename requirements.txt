@@ -93,7 +93,7 @@ google-auth-httplib2==0.2.0
     # via google-api-python-client
 google-auth-oauthlib==1.2.2
     # via -r requirements.in
-google-cloud-aiplatform[agent-engines]==1.127.0
+google-cloud-aiplatform[agent-engines]~=1.140.0
     # via
     #   -r requirements.in
     #   google-adk
