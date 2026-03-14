@@ -76,7 +76,7 @@ flowchart TB
 
     subgraph RE["Vertex AI Reasoning Engine (us-central1)"]
         subgraph Orch["SOC Agent Orchestrator"]
-            Model["gemini-2.5-pro"]
+            Model["gemini-3.1-pro-preview<br/><i>via global endpoint</i>"]
 
             subgraph RAG["Direct Tool Access"]
                 RAGTool["VertexAiRagRetrieval<br/><i>us-east4</i>"]
@@ -84,8 +84,8 @@ flowchart TB
             end
 
             subgraph Specialists["Sub-Agents"]
-                CTI["CTI Researcher<br/><i>gemini-2.5-flash</i><br/><br/>• Threat Intel<br/>• IOC Analysis<br/>• Threat Actors<br/>• Campaigns"]
-                T1["Tier 1 Analyst<br/><i>gemini-2.5-flash</i><br/><br/>• Alert Triage<br/>• Case Mgmt<br/>• Investigation<br/>• Escalation"]
+                CTI["CTI Researcher<br/><i>gemini-3-flash-preview</i><br/><br/>• Threat Intel<br/>• IOC Analysis<br/>• Threat Actors<br/>• Campaigns"]
+                T1["Tier 1 Analyst<br/><i>gemini-3-flash-preview</i><br/><br/>• Alert Triage<br/>• Case Mgmt<br/>• Investigation<br/>• Escalation"]
             end
         end
     end
@@ -283,7 +283,7 @@ uv run server.py
 Yes. All security tool integrations are optional.
 
 **What AI models are supported?**
-Default is gemini-2.5-pro for orchestrator, gemini-2.5-flash for sub-agents. Configurable in agent.py.
+Default is `gemini-3.1-pro-preview` for orchestrator, `gemini-3-flash-preview` for sub-agents. Configurable in agent.py.
 
 **How do I update the agent?**
 ```bash
