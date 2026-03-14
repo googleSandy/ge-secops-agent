@@ -1,9 +1,11 @@
 > [!WARNING]
 > One user has reported ~$30/day expense in Spanner and a concern that it is due to the RAG Corpus from this project. I do not see this in my own projects but I am investigating further. In the meantime, please carefully monitor your expenses.
 
-# Google Vertex AI Agent with MCP Security Tools
+# GE SecOps Agent
 
-Deploy security-focused AI agents to Google Cloud with integrated access to Chronicle, SOAR, Threat Intelligence, and Security Command Center through the Model Context Protocol (MCP).
+Deploy security-focused AI agents to Gemini Enterprise with integrated access to SecOps SIEM, SOAR, Google Threat Intelligence, and Security Command Center through the Model Context Protocol (MCP).
+
+Built with [Google ADK](https://google.github.io/adk-docs/) (Agent Development Kit) and deployed via Vertex AI Reasoning Engine.
 
 ## Table of Contents
 
@@ -15,7 +17,7 @@ Deploy security-focused AI agents to Google Cloud with integrated access to Chro
 - [Deployment Workflow](#deployment-workflow)
 - [Configuration](#configuration)
 - [Usage](#usage)
-- [AgentSpace Integration](#agentspace-integration)
+- [Gemini Enterprise Integration](#gemini-enterprise-integration)
 - [Makefile Reference](#makefile-reference)
 - [Python CLI (Alternative Interface)](#python-cli-alternative-interface)
 - [Project Structure](#project-structure)
@@ -34,7 +36,7 @@ Deploy security-focused AI agents to Google Cloud with integrated access to Chro
 
 ```bash
 # Clone and setup
-git clone --recurse-submodules https://github.com/dandye/agentic_soc_agentspace.git
+git clone --recurse-submodules https://github.com/googleSandy/ge-secops-agent.git
 cd agentic_soc_agentspace
 
 # Configure environment
@@ -85,8 +87,8 @@ Run `make help` to see this interactive command reference.
 ## Overview
 
 This project enables you to:
-- Deploy AI agents to Google Vertex AI Agent Engine with security tool access
-- Integrate with Google Security Operations (Chronicle) for threat detection
+- Deploy AI agents to Gemini Enterprise via Vertex AI Reasoning Engine
+- Integrate with Google SecOps SIEM for threat detection
 - Connect to SOAR platforms for automated response workflows
 - Access Google Threat Intelligence for IOC analysis
 - Monitor cloud security posture via Security Command Center
@@ -136,10 +138,10 @@ gcloud services enable securitycenter.googleapis.com  # If using SCC tools
 - `roles/aiplatform.user` - Create and manage AI Platform resources
 - `roles/storage.admin` - Manage staging bucket
 - `roles/iam.serviceAccountUser` - Create service accounts for agent
-- `roles/discoveryengine.admin` - Manage AgentSpace and register agents (includes agents.manage permission)
+- `roles/discoveryengine.admin` - Manage Gemini Enterprise apps and register agents (includes agents.manage permission)
 - `roles/securitycenter.admin` - Access Security Command Center (if using)
 
-**IMPORTANT:** The `roles/discoveryengine.admin` role is required to register agents with AgentSpace (provides the `agents.manage` permission). Regular users can use registered agents but cannot register new ones.
+**IMPORTANT:** The `roles/discoveryengine.admin` role is required to register agents with Gemini Enterprise (provides the `agents.manage` permission). Regular users can use registered agents but cannot register new ones.
 
 #### Service Account Configuration
 
@@ -148,7 +150,7 @@ gcloud services enable securitycenter.googleapis.com  # If using SCC tools
 Use the IAM management CLI to configure all required service account permissions automatically:
 
 ```bash
-# Setup all required IAM permissions for AgentSpace
+# Setup all required IAM permissions for Gemini Enterprise
 python manage.py iam setup
 
 # Verify permissions are configured correctly
@@ -166,10 +168,10 @@ python manage.py iam setup --dry-run --verbose
    - Purpose: Query RAG corpus during agent execution
    - Fixes: `403 PERMISSION_DENIED` error for `aiplatform.ragCorpora.query`
 
-2. **Discovery Engine Service Account**
+2. **Discovery Engine Service Account** (for Gemini Enterprise)
    - Service Account: `service-{PROJECT_NUMBER}@gcp-sa-discoveryengine.iam.gserviceaccount.com`
    - Roles: `roles/aiplatform.user`, `roles/aiplatform.viewer`
-   - Purpose: Call ADK agent from AgentSpace
+   - Purpose: Call ADK agent from Gemini Enterprise
    - Fixes: Agent registered but cannot be invoked from Gemini Enterprise UI
 
 **Manual Setup (Alternative):**
@@ -219,7 +221,7 @@ gcloud auth application-default set-quota-project $GCP_PROJECT_ID
 
 ### 1. Clone Repository (note that the submodule is checked out too)
 ```bash
-git clone --recurse-submodules https://github.com/dandye/agentic_soc_agentspace.git
+git clone --recurse-submodules https://github.com/googleSandy/ge-secops-agent.git
 cd agentic_soc_agentspace
 ```
 
@@ -246,7 +248,7 @@ make agent-engine-deploy
 
 1. Set `AGENT_ENGINE_RESOURCE_NAME` in .env (output from deployment)
 
-### 6. Create AgentSpace App (Optional)
+### 6. Create Gemini Enterprise App (Optional)
 
 **Option A: Using the Web UI (Recommended)**
 1. Navigate to [Google Cloud Console](https://console.cloud.google.com)
@@ -273,7 +275,7 @@ python manage.py agentspace create-app \
   --industry-vertical GENERIC
 ```
 
-### 7. Register Agent with AgentSpace
+### 7. Register Agent with Gemini Enterprise
 
 ```bash
 make agentspace-register
@@ -319,7 +321,7 @@ gcloud services enable aiplatform.googleapis.com storage.googleapis.com \
 
 #### Step 2: Configure IAM Service Account Permissions
 
-Configure required service account permissions for AgentSpace integration:
+Configure required service account permissions for Gemini Enterprise integration:
 
 ```bash
 # Setup IAM permissions (run once per project)
@@ -345,13 +347,13 @@ Set these variables in your `.env` file before deployment:
 - `GCP_STAGING_BUCKET` - GCS bucket name with gs:// prefix (e.g., gs://my-bucket)
 
 **Required Security Tools:**
-- Chronicle SIEM: `CHRONICLE_PROJECT_ID`, `CHRONICLE_CUSTOMER_ID`, `CHRONICLE_SERVICE_ACCOUNT_PATH`
+- SecOps SIEM: `CHRONICLE_PROJECT_ID`, `CHRONICLE_CUSTOMER_ID`, `CHRONICLE_SERVICE_ACCOUNT_PATH`
 - SOAR: `SOAR_URL`, `SOAR_API_KEY`
 - Threat Intelligence: `GTI_API_KEY` (Google Threat Intelligence/VirusTotal)
 - RAG Corpus: `RAG_CORPUS_ID` (full resource name)
 
 **Optional Variables (have sensible defaults):**
-- `CHRONICLE_REGION` - Chronicle region (default: "us")
+- `CHRONICLE_REGION` - SecOps region (default: "us")
 - `DEBUG` - Enable debug logging (default: False)
 - `RAG_SIMILARITY_TOP_K` - RAG retrieval top-k results (default: 10)
 - `RAG_DISTANCE_THRESHOLD` - RAG vector distance threshold (default: 0.6)
@@ -422,7 +424,7 @@ make rag-delete RAG_CORPUS_ID=projects/PROJECT/locations/LOCATION/ragCorpora/COR
 
 ## Data Store Management (Optional - Legacy)
 
-Discovery Engine data stores are available for AgentSpace apps but RAG is the recommended approach:
+Discovery Engine data stores are available for Gemini Enterprise apps but RAG is the recommended approach:
 
 ```bash
 # List data stores
@@ -432,13 +434,13 @@ make datastore-list
 make datastore-create NAME="Security Data" TYPE=SOLUTION_TYPE_SEARCH
 ```
 
-## AgentSpace Integration
+## Gemini Enterprise Integration
 
 > [!IMPORTANT]
 > **APP_TYPE_INTRANET Required**: When creating apps programmatically via the API/CLI, you MUST include `appType=APP_TYPE_INTRANET` and `industryVertical=GENERIC` for apps to be visible in the Gemini Enterprise web UI. Apps created through the console UI include these fields automatically. See the [official documentation](https://cloud.google.com/gemini/enterprise/docs/create-app).
 
 **Option 1: Create via Console (Recommended)**
-1. **Create AgentSpace App** - Via [Console](https://console.cloud.google.com)
+1. **Create Gemini Enterprise App** - Via [Console](https://console.cloud.google.com)
    - Navigate to Vertex AI > Search & Conversation > Apps
    - Click **Create App** and select **Agent** type
    - Configure with your preferred settings
@@ -497,7 +499,7 @@ The CLI is organized into subcommand groups:
 ```
 python manage.py
 ├── agent-engine    # Manage Agent Engine instances
-├── agentspace      # Manage AgentSpace apps and agents
+├── agentspace      # Manage Gemini Enterprise apps and agents
 ├── vertex          # Verify and manage Vertex AI setup
 ├── iam             # Manage IAM permissions for service accounts
 ├── oauth           # Manage OAuth authorizations
@@ -721,13 +723,13 @@ adk web
 ```
 
 Replace the values:
-- `/path/to/your/service-account.json` - Path to your Chronicle service account JSON file (same as `CHRONICLE_SERVICE_ACCOUNT_PATH` in .env)
+- `/path/to/your/service-account.json` - Path to your SecOps service account JSON file (same as `CHRONICLE_SERVICE_ACCOUNT_PATH` in .env)
 - `your-project-id` - Your GCP project ID (same as `GCP_PROJECT_ID` in .env)
 - `us-central1` - Your GCP location (same as `GCP_LOCATION` in .env)
 
 The web UI will open at `http://localhost:8000` where you can:
 - Chat with your agent in real-time
-- Test MCP tool integrations (Chronicle, SOAR, GTI, SCC)
+- Test MCP tool integrations (SecOps SIEM, SOAR, GTI, SCC)
 - Query the RAG corpus for runbooks and procedures
 - See tool calls and responses as they happen
 - Iterate on your agent configuration without redeployment
@@ -741,9 +743,9 @@ The web UI will open at `http://localhost:8000` where you can:
 - **Easy debugging**: See tool calls and responses in real-time
 - **Rapid iteration**: Modify agent.py and restart immediately
 
-**When to use Agent Engine instead:**
+**When to use Reasoning Engine instead:**
 - Production deployments
-- Integration with AgentSpace
+- Integration with Gemini Enterprise
 - Multi-user access
 - Persistent conversation history
 - Autoscaling requirements
@@ -782,7 +784,7 @@ python -c "from dotenv import load_dotenv; import os; load_dotenv(); print(os.ge
 | **Bucket not found** | `gsutil mb -p $GCP_PROJECT_ID $GCP_STAGING_BUCKET` |
 | **MCP module missing** | `git submodule update --init --recursive` |
 | **KeyError: GCP_PROJECT_ID** | Check `.env` exists with correct variable names (v2.0+) |
-| **Agent not in AgentSpace** | `make agentspace-verify` then `make agentspace-link-agent` |
+| **Agent not in Gemini Enterprise** | `make agentspace-verify` then `make agentspace-link-agent` |
 | **OAuth expired** | `make oauth-setup CLIENT_SECRET=client_secret.json` |
 | **Agent not responding** | Check logs: `gcloud logging tail "resource.type=aiplatform.googleapis.com/ReasoningEngine"` |
 | **SOAR connection failed** | Verify URL: `curl -I "${SOAR_URL}/api/external/v1/health"` |
@@ -825,12 +827,12 @@ Vertex AI charges per API call. Security products require separate licensing.
 ## Support
 
 ### Getting Help
-- [GitHub Issues](https://github.com/dandye/agentic_soc_agentspace/issues) - Report bugs or request features
+- [GitHub Issues](https://github.com/googleSandy/ge-secops-agent/issues) - Report bugs or request features
 - [Stack Overflow](https://stackoverflow.com/questions/tagged/vertex-ai) - Community support
 - [Google Cloud Support](https://console.cloud.google.com/support) - Production issues
 
 ### Resources
 - [Vertex AI Docs](https://cloud.google.com/vertex-ai/docs) - Google Cloud documentation
 - [MCP Protocol](https://modelcontextprotocol.io/) - Model Context Protocol specification
-- [Chronicle Docs](https://cloud.google.com/chronicle/docs) - SIEM documentation
+- [SecOps Docs](https://cloud.google.com/chronicle/docs) - SIEM documentation
 - [Security Command Center](https://cloud.google.com/security-command-center/docs) - Cloud security docs
