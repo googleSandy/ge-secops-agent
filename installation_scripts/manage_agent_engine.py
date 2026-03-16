@@ -728,6 +728,25 @@ class AgentEngineManager:
                 # See: https://github.com/google/adk-python/issues/3628
                 "GOOGLE_CLOUD_LOCATION": "global",
                 "GOOGLE_GENAI_USE_VERTEXAI": "TRUE",
+                # Observability: Enable telemetry and logging
+                # See: https://cloud.google.com/agent-builder/agent-engine/manage/tracing
+                # See: https://cloud.google.com/agent-builder/agent-engine/manage/logging
+                "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "true",
+                # GTI Response Caching (Latency Optimization)
+                "GTI_CACHE_ENABLED": os.environ.get("GTI_CACHE_ENABLED", "True"),
+                "GTI_CACHE_FILE_TTL": os.environ.get("GTI_CACHE_FILE_TTL", "86400"),  # 24h
+                "GTI_CACHE_IP_TTL": os.environ.get("GTI_CACHE_IP_TTL", "43200"),  # 12h
+                "GTI_CACHE_DOMAIN_TTL": os.environ.get("GTI_CACHE_DOMAIN_TTL", "1800"),  # 30m
+                "GTI_CACHE_URL_TTL": os.environ.get("GTI_CACHE_URL_TTL", "1800"),  # 30m
+                "GTI_CACHE_THREAT_ACTOR_TTL": os.environ.get("GTI_CACHE_THREAT_ACTOR_TTL", "86400"),  # 24h
+                "GTI_CACHE_MALWARE_FAMILY_TTL": os.environ.get("GTI_CACHE_MALWARE_FAMILY_TTL", "86400"),  # 24h
+                "GTI_CACHE_CAMPAIGN_TTL": os.environ.get("GTI_CACHE_CAMPAIGN_TTL", "43200"),  # 12h
+                "GTI_CACHE_REPORT_TTL": os.environ.get("GTI_CACHE_REPORT_TTL", "43200"),  # 12h
+                "GTI_CACHE_COLLECTION_TTL": os.environ.get("GTI_CACHE_COLLECTION_TTL", "43200"),  # 12h
+                "GTI_CACHE_THREAT_PROFILE_TTL": os.environ.get("GTI_CACHE_THREAT_PROFILE_TTL", "86400"),  # 24h
+                "GTI_CACHE_HUNTING_RULESET_TTL": os.environ.get("GTI_CACHE_HUNTING_RULESET_TTL", "86400"),  # 24h
+                "GTI_CACHE_MAX_SIZE": os.environ.get("GTI_CACHE_MAX_SIZE", "250"),
             }
 
             # Add service account configuration based on authentication method
