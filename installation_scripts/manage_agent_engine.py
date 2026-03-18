@@ -27,11 +27,11 @@ from google.cloud.aiplatform_v1beta1 import (
     ListReasoningEnginesRequest,
     ReasoningEngineServiceClient,
 )
+from vertexai import agent_engines
+from vertexai.preview.reasoning_engines import AdkApp
 
 # Added AgentSpaceManager for synchronized UI purges
 from installation_scripts.manage_agentspace import AgentSpaceManager
-from vertexai import agent_engines
-from vertexai.preview.reasoning_engines import AdkApp
 
 
 # Import Discovery Engine client for Agent Builder assistants
@@ -594,14 +594,22 @@ class AgentEngineManager:
             if not has_secret and not has_path:
                 typer.secho(" Configuration Error", fg=typer.colors.RED, bold=True)
                 typer.echo()
-                typer.echo("Either CHRONICLE_SERVICE_ACCOUNT_SECRET or CHRONICLE_SERVICE_ACCOUNT_PATH must be set")
+                typer.echo(
+                    "Either CHRONICLE_SERVICE_ACCOUNT_SECRET or CHRONICLE_SERVICE_ACCOUNT_PATH must be set"
+                )
                 typer.echo()
                 typer.echo("Option 1 (Recommended): Use Secret Manager")
-                typer.echo("  1. Upload SA file: python installation_scripts/upload_secret.py upload")
-                typer.echo("  2. Add to .env: CHRONICLE_SERVICE_ACCOUNT_SECRET=projects/PROJECT/secrets/SECRET/versions/latest")
+                typer.echo(
+                    "  1. Upload SA file: python installation_scripts/upload_secret.py upload"
+                )
+                typer.echo(
+                    "  2. Add to .env: CHRONICLE_SERVICE_ACCOUNT_SECRET=projects/PROJECT/secrets/SECRET/versions/latest"
+                )
                 typer.echo()
                 typer.echo("Option 2 (Legacy): Use local file")
-                typer.echo("  Add to .env: CHRONICLE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json")
+                typer.echo(
+                    "  Add to .env: CHRONICLE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json"
+                )
                 return None
 
             # Validate RAG_CORPUS_ID format
@@ -646,7 +654,7 @@ class AgentEngineManager:
             if CHRONICLE_SERVICE_ACCOUNT_SECRET:
                 typer.secho(
                     "Using Secret Manager for service account authentication",
-                    fg=typer.colors.GREEN
+                    fg=typer.colors.GREEN,
                 )
                 typer.echo(f"  Secret: {CHRONICLE_SERVICE_ACCOUNT_SECRET}")
                 # No file copying needed - MCP server will read from Secret Manager
@@ -664,7 +672,7 @@ class AgentEngineManager:
 
                 typer.secho(
                     "Using local file for service account authentication (legacy mode)",
-                    fg=typer.colors.YELLOW
+                    fg=typer.colors.YELLOW,
                 )
                 typer.echo(f"  Path: {CHRONICLE_SERVICE_ACCOUNT_PATH}")
                 dest_dir = Path("./mcp-security/server/secops/secops_mcp/")
@@ -738,12 +746,13 @@ class AgentEngineManager:
             # Add service account configuration based on authentication method
             if use_secret_manager:
                 # Use Secret Manager - pass secret resource name
-                env_vars["CHRONICLE_SERVICE_ACCOUNT_SECRET"] = CHRONICLE_SERVICE_ACCOUNT_SECRET
+                env_vars["CHRONICLE_SERVICE_ACCOUNT_SECRET"] = (
+                    CHRONICLE_SERVICE_ACCOUNT_SECRET
+                )
             else:
                 # Use local file - pass filename only (file already copied to package)
                 sa_filename = Path(CHRONICLE_SERVICE_ACCOUNT_PATH).name
                 env_vars["SECOPS_SA_PATH"] = sa_filename
-
 
             # Determine display name based on agent module
             if agent_module == "soc_agent_flash":
@@ -801,7 +810,7 @@ class AgentEngineManager:
                     "mcp-security/server/secops",
                     "mcp-security/server/secops-soar",
                     "mcp-security/server/gti",
-                    "mcp-security/server/scc"
+                    "mcp-security/server/scc",
                 ],
                 env_vars=env_vars,
             )
@@ -852,9 +861,11 @@ class AgentEngineManager:
     async def _async_test_agent(self, remote_app):
         """Async test function for agent engine."""
         fd, log_path = tempfile.mkstemp(suffix=".log", prefix="agent_test_")
-        typer.secho(f"\nRedirecting detailed test events to: {log_path}", fg=typer.colors.CYAN)
-        
-        with os.fdopen(fd, 'w') as log_file:
+        typer.secho(
+            f"\nRedirecting detailed test events to: {log_path}", fg=typer.colors.CYAN
+        )
+
+        with os.fdopen(fd, "w") as log_file:
             user_id = "test_user"
             session = await remote_app.async_create_session(user_id=user_id)
             session_id = session.get("id")
@@ -873,7 +884,7 @@ class AgentEngineManager:
             for test_message in test_messages:
                 typer.echo(f"\nSending test query: {test_message}")
                 log_file.write(f"\n--- QUERY: {test_message} ---\n")
-                
+
                 events = []
                 async for event in remote_app.async_stream_query(
                     user_id=user_id, session_id=session_id, message=test_message
@@ -882,18 +893,22 @@ class AgentEngineManager:
                     events.append(event)
                     # Optional: Print a dot to show progress instead of full event
                     print(".", end="", flush=True)
-                
-                print() # New line after dots
+
+                print()  # New line after dots
 
                 if not events:
-                    typer.secho(" No events received from agent!", fg=typer.colors.YELLOW)
+                    typer.secho(
+                        " No events received from agent!", fg=typer.colors.YELLOW
+                    )
                     log_file.write("No events received from agent!\n")
                 else:
                     typer.secho(
                         f" Test completed successfully - received {len(events)} events",
                         fg=typer.colors.GREEN,
                     )
-                    log_file.write(f"Test completed successfully - received {len(events)} events\n")
+                    log_file.write(
+                        f"Test completed successfully - received {len(events)} events\n"
+                    )
 
         typer.secho(f"\nDetailed logs available at: {log_path}\n", fg=typer.colors.CYAN)
 
@@ -918,7 +933,9 @@ class AgentEngineManager:
             typer.echo("\n" + "=" * 80)
             typer.secho("MCP Connection Pre-Warming", fg=typer.colors.CYAN, bold=True)
             typer.echo("=" * 80 + "\n")
-            typer.echo("Initializing MCP server connections to reduce cold start latency...")
+            typer.echo(
+                "Initializing MCP server connections to reduce cold start latency..."
+            )
 
             # Get the agent
             remote_app = agent_engines.get(resource_name)
@@ -939,9 +956,18 @@ class AgentEngineManager:
         # Warmup queries - each targets a different MCP server
         # Using lightweight queries to ensure fast warmup
         warmup_queries = [
-            ("List the first 3 SOAR cases", "SOAR MCP"),  # Lightweight - first page of cases
-            ("Check IP reputation 8.8.8.8", "GTI MCP"),  # Single IP lookup (cached after first call)
-            ("What tools are available in Chronicle SIEM?", "Chronicle SIEM MCP"),  # Tool discovery, no data query
+            (
+                "List the first 3 SOAR cases",
+                "SOAR MCP",
+            ),  # Lightweight - first page of cases
+            (
+                "Check IP reputation 8.8.8.8",
+                "GTI MCP",
+            ),  # Single IP lookup (cached after first call)
+            (
+                "What tools are available in Chronicle SIEM?",
+                "Chronicle SIEM MCP",
+            ),  # Tool discovery, no data query
         ]
 
         for query, target_mcp in warmup_queries:
@@ -956,9 +982,15 @@ class AgentEngineManager:
                     event_count += 1
                     # Silently consume events - we just want to trigger MCP connections
 
-                typer.secho(f"  ✓ {target_mcp} warmed up ({event_count} events)", fg=typer.colors.GREEN)
+                typer.secho(
+                    f"  ✓ {target_mcp} warmed up ({event_count} events)",
+                    fg=typer.colors.GREEN,
+                )
             except Exception as e:
-                typer.secho(f"  Warning: {target_mcp} warmup failed: {e}", fg=typer.colors.YELLOW)
+                typer.secho(
+                    f"  Warning: {target_mcp} warmup failed: {e}",
+                    fg=typer.colors.YELLOW,
+                )
                 # Continue with other warmup queries even if one fails
 
         typer.echo("\n" + "=" * 80)
@@ -1247,28 +1279,32 @@ def create(
             resource_name.split("/")[-1] if "/" in resource_name else resource_name
         )
         typer.echo(f"AGENT_ENGINE_ID={engine_id}")
-        
+
         # Write back to .env automatically
         try:
             target_env = manager.env_file
             if target_env.exists():
                 set_key(str(target_env), "AGENT_ENGINE_RESOURCE_NAME", resource_name)
                 set_key(str(target_env), "AGENT_ENGINE_ID", engine_id)
-                typer.secho("\n Automatically updated .env with new agent coordinates!", fg=typer.colors.GREEN)
+                typer.secho(
+                    "\n Automatically updated .env with new agent coordinates!",
+                    fg=typer.colors.GREEN,
+                )
         except Exception as e:
             typer.secho(f"\n Failed to auto-update .env: {e}", fg=typer.colors.YELLOW)
-            
+
     else:
         raise typer.Exit(code=1)
+
 
 @app.command()
 def deploy(
     agent_module: Annotated[
         str,
         typer.Option(
-            "--agent-module", 
-            "-a", 
-            help="Agent module to deploy (e.g., 'soc_agent', 'soc_agent_flash')"
+            "--agent-module",
+            "-a",
+            help="Agent module to deploy (e.g., 'soc_agent', 'soc_agent_flash')",
         ),
     ] = "soc_agent",
     debug: Annotated[
@@ -1283,11 +1319,13 @@ def deploy(
 ) -> None:
     """Intelligently deploy a new Agent Engine instance and cleanup older versions."""
     typer.echo("\n" + "=" * 80)
-    typer.secho("Intelligent Deployment (Build & Replace)", fg=typer.colors.MAGENTA, bold=True)
+    typer.secho(
+        "Intelligent Deployment (Build & Replace)", fg=typer.colors.MAGENTA, bold=True
+    )
     typer.echo("=" * 80 + "\n")
 
     manager = AgentEngineManager(env_file)
-    
+
     # Determine what the display name will be so we can find orphans later
     if agent_module == "soc_agent_flash":
         display_name = "SecOps Security Agent - Flash"
@@ -1299,32 +1337,44 @@ def deploy(
         display_name = "SecOps Security Agent - CTI"
     else:
         display_name = f"SecOps Security Agent - {agent_module}"
-        
+
     typer.echo(f"Targeting logic for: {display_name}")
-    
+
     # Find existing agents
     orphans = manager.get_agents_by_display_name(display_name)
     if orphans:
-        typer.secho(f"Found {len(orphans)} existing '{display_name}' instances.", fg=typer.colors.YELLOW)
+        typer.secho(
+            f"Found {len(orphans)} existing '{display_name}' instances.",
+            fg=typer.colors.YELLOW,
+        )
     else:
-        typer.secho("No existing instances found. Proceeding with fresh build.", fg=typer.colors.GREEN)
-        
+        typer.secho(
+            "No existing instances found. Proceeding with fresh build.",
+            fg=typer.colors.GREEN,
+        )
+
     # Create the new agent
     typer.echo("\n--- Phase 1: Building New Engine ---")
     resource_name = manager.create_agent(agent_module, debug, no_test)
-    
+
     if resource_name:
         typer.echo("\n--- Phase 2: Updating Environment ---")
-        engine_id = resource_name.split("/")[-1] if "/" in resource_name else resource_name
-        
+        engine_id = (
+            resource_name.split("/")[-1] if "/" in resource_name else resource_name
+        )
+
         try:
             target_env = manager.env_file
             if target_env.exists():
                 set_key(str(target_env), "AGENT_ENGINE_RESOURCE_NAME", resource_name)
                 set_key(str(target_env), "AGENT_ENGINE_ID", engine_id)
-                typer.secho(f"Successfully bound .env to -> {engine_id}", fg=typer.colors.GREEN)
+                typer.secho(
+                    f"Successfully bound .env to -> {engine_id}", fg=typer.colors.GREEN
+                )
         except Exception as e:
-            typer.secho(f"Warning: Failed to auto-update .env: {e}", fg=typer.colors.YELLOW)
+            typer.secho(
+                f"Warning: Failed to auto-update .env: {e}", fg=typer.colors.YELLOW
+            )
 
         # Cleanup old agents (Vertex + AgentSpace UI)
         if orphans:
@@ -1332,38 +1382,56 @@ def deploy(
             # 1. Purge Vertex AI containers
             for orphan in orphans:
                 if orphan["resource_name"] != resource_name:
-                    typer.secho(f"Deleting stale engine: {orphan['resource_name']}", fg=typer.colors.YELLOW)
+                    typer.secho(
+                        f"Deleting stale engine: {orphan['resource_name']}",
+                        fg=typer.colors.YELLOW,
+                    )
                     manager.delete_agent(orphan["resource_name"], force=True)
-            
+
             # 2. Unlink AgentSpace UI proxies implicitly
             try:
                 typer.echo("\n--- Phase 4: Validating Workspace UI Proxies ---")
                 ui_manager = AgentSpaceManager(env_file)
                 proxy_agents = ui_manager.list_agents(show_raw=False)
-                
+
                 # AgentSpace uses a different display name than Vertex AI natively
-                proxy_display_name = ui_manager.env_vars.get("AGENT_DISPLAY_NAME", "SecOps Security Agent")
-                
+                proxy_display_name = ui_manager.env_vars.get(
+                    "AGENT_DISPLAY_NAME", "SecOps Security Agent"
+                )
+
                 if proxy_agents:
                     for proxy in proxy_agents:
                         # Unlink proxies matching our exact displayName that do NOT match the one we are actively writing
                         if proxy.get("displayName") == proxy_display_name:
                             proxy_id = proxy.get("name", "").split("/")[-1]
-                            
+
                             # Never nuke the active .env proxy!
-                            if proxy_id != ui_manager.env_vars.get("AGENTSPACE_AGENT_ID"):
-                                typer.secho(f"Unlinking stale Workspace Proxy: {proxy_id}", fg=typer.colors.YELLOW)
-                                ui_manager.unlink_agent_from_agentspace(agent_id=proxy_id, force=True)
+                            if proxy_id != ui_manager.env_vars.get(
+                                "AGENTSPACE_AGENT_ID"
+                            ):
+                                typer.secho(
+                                    f"Unlinking stale Workspace Proxy: {proxy_id}",
+                                    fg=typer.colors.YELLOW,
+                                )
+                                ui_manager.unlink_agent_from_agentspace(
+                                    agent_id=proxy_id, force=True
+                                )
             except Exception as e:
-                typer.secho(f"Warning: Failed to clean AgentSpace workspace proxies implicitly: {e}", fg=typer.colors.YELLOW)
-                
+                typer.secho(
+                    f"Warning: Failed to clean AgentSpace workspace proxies implicitly: {e}",
+                    fg=typer.colors.YELLOW,
+                )
+
             typer.secho("\n Garbage collection complete!", fg=typer.colors.GREEN)
-            
+
         typer.echo("\n" + "=" * 80)
         typer.secho("INTELLIGENT DEPLOYMENT COMPLETE", fg=typer.colors.GREEN, bold=True)
         typer.echo("=" * 80)
     else:
-        typer.secho("\nDeployment failed during Phase 1. Aborting garbage collection.", fg=typer.colors.RED)
+        typer.secho(
+            "\nDeployment failed during Phase 1. Aborting garbage collection.",
+            fg=typer.colors.RED,
+        )
         raise typer.Exit(code=1)
 
 
@@ -1432,7 +1500,9 @@ def warmup(
     ] = None,
     index: Annotated[
         int | None,
-        typer.Option("--index", "-i", help="Index of the agent from the list to warm up"),
+        typer.Option(
+            "--index", "-i", help="Index of the agent from the list to warm up"
+        ),
     ] = None,
     env_file: Annotated[
         Path, typer.Option(help="Path to the environment file.")

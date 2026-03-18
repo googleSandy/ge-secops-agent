@@ -14,7 +14,6 @@ Usage:
 """
 
 import os
-import shutil
 from pathlib import Path
 from typing import Annotated
 
@@ -22,6 +21,7 @@ import typer
 from dotenv import load_dotenv
 from google.auth import default
 from google.cloud import storage
+
 
 app = typer.Typer(
     add_completion=False,
@@ -157,6 +157,7 @@ class RAGCleanup:
                     if "*" in part:
                         # Wildcard in part
                         import fnmatch
+
                         if any(fnmatch.fnmatch(p, part) for p in path_parts):
                             if pattern.endswith("/**") or pattern.endswith("/*"):
                                 return True
@@ -224,9 +225,13 @@ class RAGCleanup:
         typer.echo("=" * 80)
 
         typer.echo(f"\nTotal markdown files found: {len(keep) + len(remove)}")
-        typer.secho(f"Files to KEEP (actual runbooks): {len(keep)}", fg=typer.colors.GREEN)
+        typer.secho(
+            f"Files to KEEP (actual runbooks): {len(keep)}", fg=typer.colors.GREEN
+        )
         typer.secho(f"Files to REMOVE (cruft): {len(remove)}", fg=typer.colors.RED)
-        typer.echo(f"\nReduction: {len(remove)} files ({100*len(remove)//(len(keep)+len(remove))}%)")
+        typer.echo(
+            f"\nReduction: {len(remove)} files ({100*len(remove)//(len(keep)+len(remove))}%)"
+        )
 
         if verbose:
             typer.echo("\n" + "-" * 40)
@@ -286,14 +291,21 @@ class RAGCleanup:
         """Sync only good runbook files to GCS."""
         self._init_gcs()
 
-        bucket_name = bucket_name or self.env_vars.get("GCP_STAGING_BUCKET", "").replace("gs://", "")
+        bucket_name = bucket_name or self.env_vars.get(
+            "GCP_STAGING_BUCKET", ""
+        ).replace("gs://", "")
         if not bucket_name:
-            typer.secho("No bucket specified and GCP_STAGING_BUCKET not set", fg=typer.colors.RED)
+            typer.secho(
+                "No bucket specified and GCP_STAGING_BUCKET not set",
+                fg=typer.colors.RED,
+            )
             raise typer.Exit(code=1)
 
         keep, _ = self.categorize_files()
 
-        typer.echo(f"\nSyncing {len(keep)} runbook files to gs://{bucket_name}/{prefix}/")
+        typer.echo(
+            f"\nSyncing {len(keep)} runbook files to gs://{bucket_name}/{prefix}/"
+        )
 
         if dry_run:
             typer.secho("\n[DRY RUN] Would upload:", fg=typer.colors.YELLOW)
@@ -313,7 +325,9 @@ class RAGCleanup:
             blob.upload_from_filename(str(file_path))
             uploaded_uris.append(f"gs://{bucket_name}/{blob_name}")
 
-        typer.secho(f"\nUploaded {len(uploaded_uris)} files to GCS", fg=typer.colors.GREEN)
+        typer.secho(
+            f"\nUploaded {len(uploaded_uris)} files to GCS", fg=typer.colors.GREEN
+        )
         return uploaded_uris
 
     def generate_import_commands(self, gcs_prefix: str = "rag-runbooks-clean") -> None:
@@ -326,13 +340,22 @@ class RAGCleanup:
         typer.echo("=" * 80)
 
         typer.echo("\n1. Delete the old RAG corpus:")
-        typer.secho(f"   make rag-delete RAG_CORPUS_ID={corpus_id} FORCE=1", fg=typer.colors.YELLOW)
+        typer.secho(
+            f"   make rag-delete RAG_CORPUS_ID={corpus_id} FORCE=1",
+            fg=typer.colors.YELLOW,
+        )
 
         typer.echo("\n2. Create a new clean RAG corpus:")
-        typer.secho('   make rag-create NAME="Agentic SOC Runbooks (Clean)" DESC="Curated security runbooks only"', fg=typer.colors.YELLOW)
+        typer.secho(
+            '   make rag-create NAME="Agentic SOC Runbooks (Clean)" DESC="Curated security runbooks only"',
+            fg=typer.colors.YELLOW,
+        )
 
         typer.echo("\n3. Import the clean files (after getting new corpus ID):")
-        typer.secho(f'   make rag-import RAG_CORPUS_ID=<NEW_CORPUS_ID> GCS_URI="{bucket}/{gcs_prefix}/"', fg=typer.colors.YELLOW)
+        typer.secho(
+            f'   make rag-import RAG_CORPUS_ID=<NEW_CORPUS_ID> GCS_URI="{bucket}/{gcs_prefix}/"',
+            fg=typer.colors.YELLOW,
+        )
 
         typer.echo("\n4. Update .env with the new RAG_CORPUS_ID")
 
@@ -342,7 +365,9 @@ class RAGCleanup:
 
 @app.command()
 def analyze(
-    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show all files")] = False,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Show all files")
+    ] = False,
     env_file: Annotated[Path, typer.Option(help="Path to .env file")] = Path(".env"),
 ) -> None:
     """Analyze files and show what would be kept vs removed."""
@@ -355,8 +380,12 @@ def analyze(
 @app.command()
 def sync_to_gcs(
     bucket: Annotated[str | None, typer.Option(help="GCS bucket name")] = None,
-    prefix: Annotated[str, typer.Option(help="GCS prefix for uploaded files")] = "rag-runbooks-clean",
-    dry_run: Annotated[bool, typer.Option("--dry-run", "-n", help="Show what would be uploaded")] = False,
+    prefix: Annotated[
+        str, typer.Option(help="GCS prefix for uploaded files")
+    ] = "rag-runbooks-clean",
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", "-n", help="Show what would be uploaded")
+    ] = False,
     env_file: Annotated[Path, typer.Option(help="Path to .env file")] = Path(".env"),
 ) -> None:
     """Upload only valid runbook files to GCS."""
@@ -368,7 +397,9 @@ def sync_to_gcs(
 @app.command()
 def full_cleanup(
     bucket: Annotated[str | None, typer.Option(help="GCS bucket name")] = None,
-    prefix: Annotated[str, typer.Option(help="GCS prefix for uploaded files")] = "rag-runbooks-clean",
+    prefix: Annotated[
+        str, typer.Option(help="GCS prefix for uploaded files")
+    ] = "rag-runbooks-clean",
     env_file: Annotated[Path, typer.Option(help="Path to .env file")] = Path(".env"),
 ) -> None:
     """Run full cleanup workflow: analyze, sync to GCS, show commands."""

@@ -1,10 +1,16 @@
-# IMPORTANT: Override location BEFORE any google imports to enable Gemini 3.x models
+import json
+import logging
+import os
+import sys
+from pathlib import Path
+
+
+# Override location BEFORE any google imports to enable Gemini 3.x models
 # Gemini 3.x models require location="global" but Reasoning Engine deploys to a specific region
 # This workaround routes model API calls to global while keeping Reasoning Engine regional
 # See: https://github.com/google/adk-python/issues/3628#issuecomment-3595215761
-import os
-os.environ['GOOGLE_CLOUD_LOCATION'] = 'global'
-os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = 'TRUE'
+os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
 
 """
 SOC Agent Module - Orchestrator with Sub-Agent Delegation
@@ -46,49 +52,53 @@ clarity are paramount. For this project, we explicitly value clarity over DRY.
 See PR #25 discussion for additional context on this architectural decision.
 """
 
-import logging
-import os
-import sys
-import json
-from pathlib import Path
+import google.cloud.logging  # noqa: E402
+import vertexai  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
+from google.adk.agents import Agent  # noqa: E402
+from google.adk.agents.context import Context  # noqa: E402
+from google.adk.skills import load_skill_from_dir  # noqa: E402
+from google.adk.tools import skill_toolset  # noqa: E402
+from google.adk.tools.agent_tool import AgentTool  # noqa: E402
+from google.adk.tools.load_memory_tool import LoadMemoryTool  # noqa: E402
+from google.adk.tools.mcp_tool.mcp_session_manager import (  # noqa: E402
+    StdioConnectionParams,  # noqa: E402
+)
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset  # noqa: E402
+from google.adk.tools.retrieval import VertexAiRagRetrieval  # noqa: E402
+from google.cloud import storage  # noqa: E402
+from google.genai.types import (  # noqa: E402
+    AutomaticFunctionCallingConfig,
+    GenerateContentConfig,
+    Part,
+)
+from mcp import StdioServerParameters  # noqa: E402
 
-from google.cloud import storage
-
-import vertexai
-from dotenv import load_dotenv
-from google.adk.agents import Agent
-from google.adk.tools.agent_tool import AgentTool
 
 # Monkey-patch version property to prevent Vertex AI Agent Engine serialization errors
 # The Vertex AI telemetry/instrumentation sometimes searches for '.version' on models/tools
 Agent.version = "1.0"
 AgentTool.version = "1.0"
 
-from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
-from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
-from google.adk.tools.retrieval import VertexAiRagRetrieval
-from google.adk.tools.load_memory_tool import LoadMemoryTool
-from google.adk.agents.context import Context
-from google.genai.types import GenerateContentConfig, AutomaticFunctionCallingConfig, Part
-from mcp import StdioServerParameters
-from google.adk.skills import load_skill_from_dir
-from google.adk.tools import skill_toolset
 
 # Explicitly disable the automatic execution loop
 strict_config = GenerateContentConfig(
     automatic_function_calling=AutomaticFunctionCallingConfig(
-        disable=True,
-        maximum_remote_calls=0 
+        disable=True, maximum_remote_calls=0
     ),
 )
 
 # Determine Python executable based on environment
 # In deployed Vertex AI environment, use container's Python
 # In local development, use sys.executable (respects venv)
-PYTHON_EXECUTABLE = "python3" if os.environ.get("REASONING_ENGINE_DEPLOYMENT") == "True" else sys.executable
+PYTHON_EXECUTABLE = (
+    "python3"
+    if os.environ.get("REASONING_ENGINE_DEPLOYMENT") == "True"
+    else sys.executable
+)
 
 # Configure logging
-import google.cloud.logging
+
 
 logging_client = google.cloud.logging.Client()
 logging_client.setup_logging()
@@ -146,10 +156,11 @@ The Tier 1 SOC Analyst is the first line of defense, responsible for monitoring 
 # Helper Functions
 # ========================================================================
 
+
 def fetch_full_document(gcs_uri: str) -> str:
     """
     Fetches the complete document text from Google Cloud Storage.
-    
+
     Args:
         gcs_uri: The gs:// URI of the document (found via the RAG retrieval tool).
     """
@@ -157,46 +168,52 @@ def fetch_full_document(gcs_uri: str) -> str:
     if not gcs_uri.startswith("gs://"):
         logger.warning(f"FETCH_FULL_DOC_ERROR: Invalid URI format: {gcs_uri}")
         return "Error: Please provide a valid gs:// URI."
-        
+
     try:
         # Parse the GCS URI
         path_parts = gcs_uri.replace("gs://", "").split("/", 1)
         bucket_name = path_parts[0]
         blob_name = path_parts[1]
-        
-        logger.info(f"FETCH_FULL_DOC_GCS: Accessing bucket='{bucket_name}', blob='{blob_name}'")
-        
+
+        logger.info(
+            f"FETCH_FULL_DOC_GCS: Accessing bucket='{bucket_name}', blob='{blob_name}'"
+        )
+
         # Fetch the blob
         storage_client = storage.Client()
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
-        
+
         # Download and return the full text
         content = blob.download_as_text()
-        
+
         # Log the line count as proof of document size
         line_count = len(content.splitlines())
-        logger.info(f"FETCH_FULL_DOC_SUCCESS: Retrieved document. Total size: {len(content)} characters, Total lines: {line_count}")
-        
+        logger.info(
+            f"FETCH_FULL_DOC_SUCCESS: Retrieved document. Total size: {len(content)} characters, Total lines: {line_count}"
+        )
+
         return content
     except Exception as e:
-        logger.error(f"FETCH_FULL_DOC_ERROR: Failed to retrieve document: {str(e)}", exc_info=True)
+        logger.error(
+            f"FETCH_FULL_DOC_ERROR: Failed to retrieve document: {str(e)}",
+            exc_info=True,
+        )
         return f"Failed to retrieve document: {str(e)}"
+
 
 async def save_report_artifact(filename: str, report_content: str, ctx: Context) -> str:
     """
     Saves a generated analysis, intelligence report, or investigation finding as an artifact.
     MUST be called by the agent whenever you finalize a detailed report to formally save it to the system.
-    
+
     Args:
         filename: A logical filename for the report ending in .md (e.g. 'APT29_Analysis.md').
         report_content: The complete markdown content of the report you generated.
     """
     try:
-        report_bytes = report_content.encode('utf-8')
-        report_artifact = Part.from_bytes(
-            data=report_bytes, mime_type="text/markdown"
-        )
+        report_bytes = report_content.encode("utf-8")
+        report_artifact = Part.from_bytes(data=report_bytes, mime_type="text/markdown")
         version = await ctx.save_artifact(filename=filename, artifact=report_artifact)
         return f"Successfully saved report '{filename}' as artifact version {version}."
     except ValueError as e:
@@ -208,31 +225,39 @@ async def save_report_artifact(filename: str, report_content: str, ctx: Context)
 async def log_usage_metadata(ctx: Context):
     """Logs the usage metadata from the most recent event to Cloud Logging."""
     try:
-        if not ctx or not hasattr(ctx, 'session') or getattr(ctx.session, 'events', None) is None:
+        if (
+            not ctx
+            or not hasattr(ctx, "session")
+            or getattr(ctx.session, "events", None) is None
+        ):
             return
-            
+
         # Look for the last event with usage_metadata (usually the model's response)
         for event in reversed(ctx.session.events):
-            if hasattr(event, 'usage_metadata') and event.usage_metadata:
+            if hasattr(event, "usage_metadata") and event.usage_metadata:
                 usage = event.usage_metadata
                 log_data = {
                     "event_type": "agent_token_usage",
-                    "session_id": getattr(ctx.session, 'id', 'unknown'),
-                    "invocation_id": getattr(event, 'invocation_id', 'unknown'),
-                    "author": getattr(event, 'author', 'unknown'),
-                    "prompt_token_count": getattr(usage, 'prompt_token_count', 0),
-                    "candidates_token_count": getattr(usage, 'candidates_token_count', 0),
-                    "total_token_count": getattr(usage, 'total_token_count', 0),
+                    "session_id": getattr(ctx.session, "id", "unknown"),
+                    "invocation_id": getattr(event, "invocation_id", "unknown"),
+                    "author": getattr(event, "author", "unknown"),
+                    "prompt_token_count": getattr(usage, "prompt_token_count", 0),
+                    "candidates_token_count": getattr(
+                        usage, "candidates_token_count", 0
+                    ),
+                    "total_token_count": getattr(usage, "total_token_count", 0),
                 }
                 # Emit a structured message for Cloud Logging
                 logger.info(f"USAGE_METADATA: {json.dumps(log_data)}")
                 break
-                
+
     except Exception as e:
         logger.warning(f"Failed to log usage metadata: {e}")
 
 
-async def generate_memory(ctx: Context = None, callback_context: Context = None, **kwargs):
+async def generate_memory(
+    ctx: Context = None, callback_context: Context = None, **kwargs
+):
     """
     Triggers memory generation for the current session.
     This saves the conversation to memory at the end of each interaction.
@@ -241,10 +266,10 @@ async def generate_memory(ctx: Context = None, callback_context: Context = None,
     if not ctx:
         logger.warning("No context provided to generate_memory")
         return
-        
+
     # Log usage metadata to Cloud Logging
     await log_usage_metadata(ctx)
-        
+
     try:
         await ctx.add_session_to_memory()
     except Exception as e:
@@ -278,7 +303,9 @@ def create_agent():
     CHRONICLE_PROJECT_ID = os.environ.get("CHRONICLE_PROJECT_ID")
     CHRONICLE_REGION = os.environ.get("CHRONICLE_REGION", "us")
     CHRONICLE_SERVICE_ACCOUNT_PATH = os.environ.get("CHRONICLE_SERVICE_ACCOUNT_PATH")
-    CHRONICLE_SERVICE_ACCOUNT_SECRET = os.environ.get("CHRONICLE_SERVICE_ACCOUNT_SECRET")
+    CHRONICLE_SERVICE_ACCOUNT_SECRET = os.environ.get(
+        "CHRONICLE_SERVICE_ACCOUNT_SECRET"
+    )
 
     # Validate required Chronicle environment variables
     if not CHRONICLE_PROJECT_ID:
@@ -367,7 +394,9 @@ def create_agent():
         if RAG_CORPUS_ID:
             # Parse RAG location from corpus resource name
             # Format: projects/PROJECT_ID/locations/LOCATION/ragCorpora/CORPUS_ID
-            rag_location = RAG_CORPUS_ID.split("/")[3] if "/" in RAG_CORPUS_ID else "us-east4"
+            rag_location = (
+                RAG_CORPUS_ID.split("/")[3] if "/" in RAG_CORPUS_ID else "us-east4"
+            )
             init_location = rag_location
             logger.info("Initializing Vertex AI for RAG corpus access")
             logger.info(f"  Project: {GCP_PROJECT_ID}")
@@ -395,12 +424,12 @@ def create_agent():
     # SUB-AGENT 1: CTI Researcher (GTI + Chronicle + SOAR)
     # ========================================================================
     logger.info("Creating CTI sub-agent...")
-    
+
     logger.info("Loading ADK Skills...")
     skill_dir = Path(__file__).parent / "skills"
     ioc_enrichment_skill = load_skill_from_dir(skill_dir / "ioc-enrichment-skill")
     malware_triage_skill = load_skill_from_dir(skill_dir / "malware-triage-skill")
-    
+
     cti_skill_toolset = skill_toolset.SkillToolset(skills=[ioc_enrichment_skill])
     tier1_skill_toolset = skill_toolset.SkillToolset(skills=[malware_triage_skill])
 
@@ -413,11 +442,11 @@ def create_agent():
                 server_params=StdioServerParameters(
                     command=PYTHON_EXECUTABLE,
                     args=["-m", "gti_mcp.server"],
-                    env=mcp_env
+                    env=mcp_env,
                 ),
-                timeout=90000  # 90 seconds (balanced timeout)
+                timeout=90000,  # 90 seconds (balanced timeout)
             ),
-            errlog=None  # Suppress errlog to permit serialization
+            errlog=None,  # Suppress errlog to permit serialization
         )
     )
 
@@ -428,11 +457,11 @@ def create_agent():
                 server_params=StdioServerParameters(
                     command=PYTHON_EXECUTABLE,
                     args=["-m", "secops_mcp.server"],
-                    env=mcp_env
+                    env=mcp_env,
                 ),
-                timeout=90000  # 90 seconds (balanced timeout)
+                timeout=90000,  # 90 seconds (balanced timeout)
             ),
-            errlog=None  # Suppress errlog to permit serialization
+            errlog=None,  # Suppress errlog to permit serialization
         )
     )
 
@@ -443,11 +472,11 @@ def create_agent():
                 server_params=StdioServerParameters(
                     command=PYTHON_EXECUTABLE,
                     args=["-m", "secops_soar_mcp.server"],
-                    env=mcp_env
+                    env=mcp_env,
                 ),
-                timeout=90000  # 90 seconds (balanced timeout)
+                timeout=90000,  # 90 seconds (balanced timeout)
             ),
-            errlog=None  # Suppress errlog to permit serialization
+            errlog=None,  # Suppress errlog to permit serialization
         )
     )
 
@@ -456,13 +485,11 @@ def create_agent():
         McpToolset(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
-                    command=PYTHON_EXECUTABLE,
-                    args=["-m", "scc_mcp"],
-                    env=mcp_env
+                    command=PYTHON_EXECUTABLE, args=["-m", "scc_mcp"], env=mcp_env
                 ),
-                timeout=90000  # 90 seconds (balanced timeout)
+                timeout=90000,  # 90 seconds (balanced timeout)
             ),
-            errlog=None  # Suppress errlog to permit serialization
+            errlog=None,  # Suppress errlog to permit serialization
         )
     )
 
@@ -534,11 +561,11 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
                 server_params=StdioServerParameters(
                     command=PYTHON_EXECUTABLE,
                     args=["-m", "secops_mcp.server"],
-                    env=mcp_env
+                    env=mcp_env,
                 ),
-                timeout=90000  # 90 seconds (balanced timeout)
+                timeout=90000,  # 90 seconds (balanced timeout)
             ),
-            errlog=None  # Suppress errlog to permit serialization
+            errlog=None,  # Suppress errlog to permit serialization
         )
     )
 
@@ -549,11 +576,11 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
                 server_params=StdioServerParameters(
                     command=PYTHON_EXECUTABLE,
                     args=["-m", "secops_soar_mcp.server"],
-                    env=mcp_env
+                    env=mcp_env,
                 ),
-                timeout=90000  # 90 seconds (balanced timeout)
+                timeout=90000,  # 90 seconds (balanced timeout)
             ),
-            errlog=None  # Suppress errlog to permit serialization
+            errlog=None,  # Suppress errlog to permit serialization
         )
     )
 
@@ -564,11 +591,11 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
                 server_params=StdioServerParameters(
                     command=PYTHON_EXECUTABLE,
                     args=["-m", "gti_mcp.server"],
-                    env=mcp_env
+                    env=mcp_env,
                 ),
-                timeout=90000  # 90 seconds (balanced timeout)
+                timeout=90000,  # 90 seconds (balanced timeout)
             ),
-            errlog=None  # Suppress errlog to permit serialization
+            errlog=None,  # Suppress errlog to permit serialization
         )
     )
 
@@ -667,7 +694,7 @@ You have direct access to:
 
 1. **retrieve_agentic_soc_runbooks** (RAG Knowledge Base):
    - Directly retrieves SOC runbooks, IRPs, procedures, and documentation from RAG corpus
-   - Use for: "What's the procedure for...", "Show me the runbook for...", "How do we handle...", "What are the steps for...", "What is the runbook for...", 
+   - Use for: "What's the procedure for...", "Show me the runbook for...", "How do we handle...", "What are the steps for...", "What is the runbook for...",
      "What is the procedure for...", "What is our IRP for...", etc.
    - **IMPORTANT:** This tool provides grounding citations - preserve them in your response!
 
@@ -786,9 +813,18 @@ Remember: Your role is to be an intelligent orchestrator that makes security ope
     tools_description = []
     if RAG_CORPUS_ID:
         tools_description.append("RAG knowledge base")
-    tools_description.extend(["fetch_full_document tool", "CTI specialist", "Tier 1 specialist", "Memory Search"])
+    tools_description.extend(
+        [
+            "fetch_full_document tool",
+            "CTI specialist",
+            "Tier 1 specialist",
+            "Memory Search",
+        ]
+    )
 
-    logger.info(f"SOC Orchestrator created successfully with {', '.join(tools_description)}!")
+    logger.info(
+        f"SOC Orchestrator created successfully with {', '.join(tools_description)}!"
+    )
     return orchestrator
 
 
@@ -804,75 +840,75 @@ memory_bank_config = {
                 {
                     "custom_memory_topic": {
                         "label": "analyst_notes",
-                        "description": "Important insights and tactical notes provided by human security analysts during incident investigations."
+                        "description": "Important insights and tactical notes provided by human security analysts during incident investigations.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "investigation_patterns",
-                        "description": "Recurring tactical patterns, known false positive indicators, or commonly encountered genuine threats in alerts."
+                        "description": "Recurring tactical patterns, known false positive indicators, or commonly encountered genuine threats in alerts.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "approved_exceptions",
-                        "description": "Authorized administrative tools, routine scanner IP address ranges, VIP user context, and explicitly documented baseline configurations that should be ignored during triage."
+                        "description": "Authorized administrative tools, routine scanner IP address ranges, VIP user context, and explicitly documented baseline configurations that should be ignored during triage.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "active_campaign_intelligence",
-                        "description": "Ongoing context regarding active Advanced Persistent Threat (APT) campaigns, recurring indicators of compromise (IOCs), or malware families actively targeting the organization that span across multiple investigations."
+                        "description": "Ongoing context regarding active Advanced Persistent Threat (APT) campaigns, recurring indicators of compromise (IOCs), or malware families actively targeting the organization that span across multiple investigations.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "asset_context",
-                        "description": "Structural information about the internal network topology, mappings of specific IP schemas to business units, and identification of business-critical servers or databases."
+                        "description": "Structural information about the internal network topology, mappings of specific IP schemas to business units, and identification of business-critical servers or databases.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "siem_query_snippets",
-                        "description": "Successful, highly-optimized Chronicle/UDM search query strings and syntactic workarounds developed by analysts or the agent during iterative log hunting."
+                        "description": "Successful, highly-optimized Chronicle/UDM search query strings and syntactic workarounds developed by analysts or the agent during iterative log hunting.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "containment_strategies",
-                        "description": "Historical records of specific remediation or containment actions (e.g., endpoint isolation, firewall blocking) that were successful against recurring infrastructure or malware."
+                        "description": "Historical records of specific remediation or containment actions (e.g., endpoint isolation, firewall blocking) that were successful against recurring infrastructure or malware.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "escalation_preferences",
-                        "description": "Organizational context regarding the specific individuals, departments, or Tier 2/3 analysts that need to be engaged or escalated to for particular alert categories."
+                        "description": "Organizational context regarding the specific individuals, departments, or Tier 2/3 analysts that need to be engaged or escalated to for particular alert categories.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "detection_rule_feedback",
-                        "description": "Feedback on overly noisy or poorly calibrated detection rules within the SIEM, including documented conditions that frequently trigger false positives."
+                        "description": "Feedback on overly noisy or poorly calibrated detection rules within the SIEM, including documented conditions that frequently trigger false positives.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "incident_response_status",
-                        "description": "The ongoing lifecycle status, assigned owners, and recent developments of active Incident Response Plans (IRPs) that bridge multiple days or shifts."
+                        "description": "The ongoing lifecycle status, assigned owners, and recent developments of active Incident Response Plans (IRPs) that bridge multiple days or shifts.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "threat_actor_profiles",
-                        "description": "Synthesized context about the specific Tactics, Techniques, and Procedures (TTPs) and behaviors of threat groups that have historically affected or are currently threatening the environment."
+                        "description": "Synthesized context about the specific Tactics, Techniques, and Procedures (TTPs) and behaviors of threat groups that have historically affected or are currently threatening the environment.",
                     }
                 },
                 {
                     "custom_memory_topic": {
                         "label": "tool_execution_quirks",
-                        "description": "Known API limitations, syntax requirements, or workarounds for specific SOAR, SIEM, or GTI tools to prevent the agent from repeatedly making the same syntax errors across sessions."
+                        "description": "Known API limitations, syntax requirements, or workarounds for specific SOAR, SIEM, or GTI tools to prevent the agent from repeatedly making the same syntax errors across sessions.",
                     }
-                }
+                },
             ]
         }
     ]

@@ -41,7 +41,7 @@ class VertexAIManager:
     OPTIONAL_APIS = [
         "discoveryengine.googleapis.com",  # For AgentSpace
         "securitycenter.googleapis.com",  # For SCC tools
-        "chronicle.googleapis.com",       # For SIEM/Chronicle tools
+        "chronicle.googleapis.com",  # For SIEM/Chronicle tools
     ]
 
     # Required IAM roles

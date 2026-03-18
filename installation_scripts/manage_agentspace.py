@@ -56,23 +56,25 @@ class AgentSpaceManager:
         self.env_vars = self._load_env_vars()
 
         # Initialize credentials with proper scopes for Discovery Engine API
-        service_account_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+        service_account_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         if service_account_path:
             # Use service account with explicit scopes
             from google.oauth2 import service_account
+
             self.creds = service_account.Credentials.from_service_account_file(
                 service_account_path,
-                scopes=['https://www.googleapis.com/auth/cloud-platform']
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
             )
             # Extract project from service account file
             import json
+
             with open(service_account_path) as f:
                 sa_info = json.load(f)
-                self.project = sa_info.get('project_id')
+                self.project = sa_info.get("project_id")
         else:
             # Fall back to default credentials
             self.creds, self.project = google.auth.default(
-                scopes=['https://www.googleapis.com/auth/cloud-platform']
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
 
     def _load_env_vars(self) -> dict[str, str]:
