@@ -88,7 +88,11 @@ strict_config = GenerateContentConfig(
 PYTHON_EXECUTABLE = "python3" if os.environ.get("REASONING_ENGINE_DEPLOYMENT") == "True" else sys.executable
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+import google.cloud.logging
+
+logging_client = google.cloud.logging.Client()
+logging_client.setup_logging()
+
 logger = logging.getLogger(__name__)
 
 # ========================================================================
@@ -149,7 +153,9 @@ def fetch_full_document(gcs_uri: str) -> str:
     Args:
         gcs_uri: The gs:// URI of the document (found via the RAG retrieval tool).
     """
+    logger.info(f"FETCH_FULL_DOC_CALL: Initiated for URI: {gcs_uri}")
     if not gcs_uri.startswith("gs://"):
+        logger.warning(f"FETCH_FULL_DOC_ERROR: Invalid URI format: {gcs_uri}")
         return "Error: Please provide a valid gs:// URI."
         
     try:
@@ -158,14 +164,23 @@ def fetch_full_document(gcs_uri: str) -> str:
         bucket_name = path_parts[0]
         blob_name = path_parts[1]
         
+        logger.info(f"FETCH_FULL_DOC_GCS: Accessing bucket='{bucket_name}', blob='{blob_name}'")
+        
         # Fetch the blob
         storage_client = storage.Client()
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
         
         # Download and return the full text
-        return blob.download_as_text()
+        content = blob.download_as_text()
+        
+        # Log the line count as proof of document size
+        line_count = len(content.splitlines())
+        logger.info(f"FETCH_FULL_DOC_SUCCESS: Retrieved document. Total size: {len(content)} characters, Total lines: {line_count}")
+        
+        return content
     except Exception as e:
+        logger.error(f"FETCH_FULL_DOC_ERROR: Failed to retrieve document: {str(e)}", exc_info=True)
         return f"Failed to retrieve document: {str(e)}"
 
 async def save_report_artifact(filename: str, report_content: str, ctx: Context) -> str:
