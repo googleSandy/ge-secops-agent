@@ -770,7 +770,7 @@ class AgentEngineManager:
                 display_name=display_name,
                 requirements=[
                     "cloudpickle",
-                    "google-adk~=1.26.0",
+                    "google-adk>=1.27.0",
                     "google-cloud-aiplatform[agent-engines]~=1.140.0",
                     "pydantic",
                     "python-dotenv",

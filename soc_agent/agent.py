@@ -58,6 +58,12 @@ import vertexai
 from dotenv import load_dotenv
 from google.adk.agents import Agent
 from google.adk.tools.agent_tool import AgentTool
+
+# Monkey-patch version property to prevent Vertex AI Agent Engine serialization errors
+# The Vertex AI telemetry/instrumentation sometimes searches for '.version' on models/tools
+Agent.version = "1.0"
+AgentTool.version = "1.0"
+
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.adk.tools.retrieval import VertexAiRagRetrieval
@@ -65,7 +71,8 @@ from google.adk.tools.load_memory_tool import LoadMemoryTool
 from google.adk.agents.context import Context
 from google.genai.types import GenerateContentConfig, AutomaticFunctionCallingConfig, Part
 from mcp import StdioServerParameters
-
+from google.adk.skills import load_skill_from_dir
+from google.adk.tools import skill_toolset
 
 # Explicitly disable the automatic execution loop
 strict_config = GenerateContentConfig(
@@ -343,8 +350,16 @@ def create_agent():
     # SUB-AGENT 1: CTI Researcher (GTI + Chronicle + SOAR)
     # ========================================================================
     logger.info("Creating CTI sub-agent...")
+    
+    logger.info("Loading ADK Skills...")
+    skill_dir = Path(__file__).parent / "skills"
+    ioc_enrichment_skill = load_skill_from_dir(skill_dir / "ioc-enrichment-skill")
+    malware_triage_skill = load_skill_from_dir(skill_dir / "malware-triage-skill")
+    
+    cti_skill_toolset = skill_toolset.SkillToolset(skills=[ioc_enrichment_skill])
+    tier1_skill_toolset = skill_toolset.SkillToolset(skills=[malware_triage_skill])
 
-    cti_tools = [save_report_artifact]
+    cti_tools = [save_report_artifact, cti_skill_toolset]
 
     # GTI tools for threat intelligence
     cti_tools.append(
@@ -465,7 +480,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
     # ========================================================================
     logger.info("Creating Tier 1 sub-agent...")
 
-    tier1_tools = [save_report_artifact]
+    tier1_tools = [save_report_artifact, tier1_skill_toolset]
 
     # Chronicle for basic entity lookups
     tier1_tools.append(
@@ -718,11 +733,6 @@ Query: "Investigate suspicious activity from user john.doe - get the runbook fir
 
 Remember: Your role is to be an intelligent orchestrator that makes security operations more efficient through smart delegation and synthesis. Transfer control to specialists when their expertise is needed.""",
         tools=orchestrator_tools,
-        #[
-        #    *orchestrator_tools,
-        #    AgentTool(agent=cti_subagent),
-        #    AgentTool(agent=tier1_subagent)
-        #],
         sub_agents=[cti_subagent, tier1_subagent],  # LLM delegation to specialists
         after_agent_callback=generate_memory,
         generate_content_config=strict_config,
