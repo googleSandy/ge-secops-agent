@@ -15,11 +15,9 @@ tasks to specialized sub-agents using LLM-based delegation (sub_agents pattern).
 ARCHITECTURE:
 - Main orchestrator (gemini-3.1-pro-preview): Routes requests to appropriate specialists via LLM delegation
   - Direct tool: RAG retrieval (VertexAiRagRetrieval) for runbooks and procedures
-  - Delegates to: CTI sub-agent and Tier 1 sub-agent via sub_agents (not AgentTool)
+  - Delegates to: CTI sub-agent and Tier 1 sub-agent or AgentTool
 - CTI sub-agent (gemini-3.1-flash-preview): Threat intelligence research with MCP tools (GTI, SecOps SIEM, SecOps SOAR, SCC)
 - Tier 1 sub-agent (gemini-3.1-flash-preview): Alert triage with MCP tools (SecOps SIEM, SecOps SOAR, GTI)
-
-CRITICAL: Uses sub_agents delegation (not AgentTool) to avoid AFC incompatibility with MCP servers
 
 ARCHITECTURAL DECISION: Intentional Code Duplication
 ======================================================
@@ -51,15 +49,31 @@ See PR #25 discussion for additional context on this architectural decision.
 import logging
 import os
 import sys
+import json
 from pathlib import Path
+
+from google.cloud import storage
 
 import vertexai
 from dotenv import load_dotenv
 from google.adk.agents import Agent
+from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.adk.tools.retrieval import VertexAiRagRetrieval
+from google.adk.tools.load_memory_tool import LoadMemoryTool
+from google.adk.agents.context import Context
+from google.genai.types import GenerateContentConfig, AutomaticFunctionCallingConfig
 from mcp import StdioServerParameters
+
+
+# Explicitly disable the automatic execution loop
+strict_config = GenerateContentConfig(
+    automatic_function_calling=AutomaticFunctionCallingConfig(
+        disable=True,
+        maximum_remote_calls=0 
+    ),
+)
 
 # Determine Python executable based on environment
 # In deployed Vertex AI environment, use container's Python
@@ -116,6 +130,52 @@ The Tier 1 SOC Analyst is the first line of defense, responsible for monitoring 
 - Strong attention to detail and ability to follow procedures
 - Good communication skills for documentation and escalation
 """
+
+# ========================================================================
+# Helper Functions
+# ========================================================================
+
+def fetch_full_document(gcs_uri: str) -> str:
+    """
+    Fetches the complete document text from Google Cloud Storage.
+    
+    Args:
+        gcs_uri: The gs:// URI of the document (found via the RAG retrieval tool).
+    """
+    if not gcs_uri.startswith("gs://"):
+        return "Error: Please provide a valid gs:// URI."
+        
+    try:
+        # Parse the GCS URI
+        path_parts = gcs_uri.replace("gs://", "").split("/", 1)
+        bucket_name = path_parts[0]
+        blob_name = path_parts[1]
+        
+        # Fetch the blob
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        
+        # Download and return the full text
+        return blob.download_as_text()
+    except Exception as e:
+        return f"Failed to retrieve document: {str(e)}"
+
+
+async def generate_memory(ctx: Context = None, callback_context: Context = None, **kwargs):
+    """
+    Triggers memory generation for the current session.
+    This saves the conversation to memory at the end of each interaction.
+    """
+    ctx = ctx or callback_context
+    if not ctx:
+        logger.warning("No context provided to generate_memory")
+        return
+        
+    try:
+        await ctx.add_session_to_memory()
+    except Exception as e:
+        logger.warning(f"Failed to generate memory: {e}")
 
 
 def create_agent():
@@ -198,6 +258,8 @@ def create_agent():
         "GTI_CACHE_DOMAIN_TTL": os.environ.get("GTI_CACHE_DOMAIN_TTL", "1800"),
         "GTI_CACHE_URL_TTL": os.environ.get("GTI_CACHE_URL_TTL", "1800"),
         "GTI_CACHE_MAX_SIZE": os.environ.get("GTI_CACHE_MAX_SIZE", "1000"),
+        "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "True",
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "True",
     }
 
     # Add Chronicle service account if available
@@ -374,6 +436,7 @@ INTELLIGENCE STANDARDS:
 
 CRITICAL: When formulating analysis plans, summarize your approach and ask for user permission before executing state-changing tools.""",
         tools=cti_tools,
+        generate_content_config=strict_config,
     )
 
     # ========================================================================
@@ -483,6 +546,7 @@ IMPORTANT LIMITATIONS:
 
 CRITICAL: Summarize procedures and ask for user permission before executing state-changing tools.""",
         tools=tier1_tools,
+        generate_content_config=strict_config,
     )
 
     # Flash agent removed - orchestrator will route simple queries to CTI or Tier1 based on complexity
@@ -492,8 +556,8 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
     # ========================================================================
     logger.info("Creating main orchestrator agent...")
 
-    # Build orchestrator tools list - only RAG tool (no function calling tools)
-    orchestrator_tools = []
+    # Build orchestrator tools list
+    orchestrator_tools = [fetch_full_document]
 
     # Add RAG tool DIRECTLY to orchestrator (not via sub-agent) to preserve grounding citations
     if RAG_CORPUS_ID:
@@ -507,8 +571,10 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
             )
         )
 
-    # Create orchestrator with LLM delegation to specialists (not AgentTool wrappers)
-    # This avoids AFC (Automatic Function Calling) incompatibility with MCP servers
+    # Add Memory Search tool
+    orchestrator_tools.append(LoadMemoryTool())
+
+    # Create orchestrator with LLM delegation to specialists (as sub_agents or AgentTool wrappers)
     orchestrator = Agent(
         name="secops_assistant",
         model="gemini-3.1-pro-preview",
@@ -520,8 +586,13 @@ You have direct access to:
 
 1. **retrieve_agentic_soc_runbooks** (RAG Knowledge Base):
    - Directly retrieves SOC runbooks, IRPs, procedures, and documentation from RAG corpus
-   - Use for: "What's the procedure for...", "Show me the runbook for...", "How do we handle..."
+   - Use for: "What's the procedure for...", "Show me the runbook for...", "How do we handle...", "What are the steps for...", "What is the runbook for...", 
+     "What is the procedure for...", "What is our IRP for...", etc.
    - **IMPORTANT:** This tool provides grounding citations - preserve them in your response!
+
+2. **fetch_full_document**:
+   - Fetches the complete document text from GCS using a gs:// URI (e.g. found via the RAG tool)
+   - Use for reading the complete text of a document to avoid truncation.
 
 You can delegate to 2 specialized agents:
 
@@ -625,17 +696,51 @@ Query: "Investigate suspicious activity from user john.doe - get the runbook fir
 → Response: Present the runbook with grounding citations, then present the investigation results from tier1_analyst
 
 Remember: Your role is to be an intelligent orchestrator that makes security operations more efficient through smart delegation and synthesis. Transfer control to specialists when their expertise is needed.""",
-        tools=orchestrator_tools,  # Only RAG tool - no function calling tools
+        tools=orchestrator_tools,
+        #[
+        #    *orchestrator_tools,
+        #    AgentTool(agent=cti_subagent),
+        #    AgentTool(agent=tier1_subagent)
+        #],
         sub_agents=[cti_subagent, tier1_subagent],  # LLM delegation to specialists
+        after_agent_callback=generate_memory,
+        generate_content_config=strict_config,
     )
 
     tools_description = []
     if RAG_CORPUS_ID:
         tools_description.append("RAG knowledge base")
-    tools_description.extend(["CTI specialist", "Tier 1 specialist"])
+    tools_description.extend(["fetch_full_document tool", "CTI specialist", "Tier 1 specialist", "Memory Search"])
 
     logger.info(f"SOC Orchestrator created successfully with {', '.join(tools_description)}!")
     return orchestrator
+
+
+# ========================================================================
+# Memory Bank Configuration
+# ========================================================================
+# Defines custom memory topics to instruct the Vertex AI Memory Bank on
+# what specific information is meaningful to persist across conversations.
+memory_bank_config = {
+    "customization_configs": [
+        {
+            "memory_topics": [
+                {
+                    "custom_memory_topic": {
+                        "label": "analyst_notes",
+                        "description": "Important insights and tactical notes provided by human security analysts during incident investigations."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "investigation_patterns",
+                        "description": "Recurring tactical patterns, known false positive indicators, or commonly encountered genuine threats in alerts."
+                    }
+                }
+            ]
+        }
+    ]
+}
 
 
 # ========================================================================
@@ -655,4 +760,5 @@ except Exception as e:
 __all__ = [
     "create_agent",
     "root_agent",
+    "memory_bank_config",
 ]

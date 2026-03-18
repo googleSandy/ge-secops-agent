@@ -714,7 +714,7 @@ class AgentEngineManager:
                 "CHRONICLE_PROJECT_ID": os.environ.get("CHRONICLE_PROJECT_ID"),
                 "CHRONICLE_CUSTOMER_ID": os.environ.get("CHRONICLE_CUSTOMER_ID"),
                 "CHRONICLE_REGION": os.environ.get("CHRONICLE_REGION", "us"),
-                "GCP_VERTEXAI_ENABLED": os.environ.get("GCP_VERTEXAI_ENABLED", "True"),
+                "GCP_VERTEXAI_ENABLED": os.environ.get("GCP_VERTEXAI_ENABLED", "TRUE"),
                 "PROJECT_ID": os.environ.get("GCP_PROJECT_ID"),
                 "GCP_PROJECT_ID": os.environ.get("GCP_PROJECT_ID"),
                 "GCP_LOCATION": os.environ.get("GCP_LOCATION", "us-central1"),
@@ -728,6 +728,9 @@ class AgentEngineManager:
                 # See: https://github.com/google/adk-python/issues/3628
                 "GOOGLE_CLOUD_LOCATION": "global",
                 "GOOGLE_GENAI_USE_VERTEXAI": "TRUE",
+                # OpenTelemetry Tracing and Logging
+                "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "TRUE",
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "TRUE",
             }
 
             # Add service account configuration based on authentication method
