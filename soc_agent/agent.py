@@ -757,6 +757,66 @@ memory_bank_config = {
                         "label": "investigation_patterns",
                         "description": "Recurring tactical patterns, known false positive indicators, or commonly encountered genuine threats in alerts."
                     }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "approved_exceptions",
+                        "description": "Authorized administrative tools, routine scanner IP address ranges, VIP user context, and explicitly documented baseline configurations that should be ignored during triage."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "active_campaign_intelligence",
+                        "description": "Ongoing context regarding active Advanced Persistent Threat (APT) campaigns, recurring indicators of compromise (IOCs), or malware families actively targeting the organization that span across multiple investigations."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "asset_context",
+                        "description": "Structural information about the internal network topology, mappings of specific IP schemas to business units, and identification of business-critical servers or databases."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "siem_query_snippets",
+                        "description": "Successful, highly-optimized Chronicle/UDM search query strings and syntactic workarounds developed by analysts or the agent during iterative log hunting."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "containment_strategies",
+                        "description": "Historical records of specific remediation or containment actions (e.g., endpoint isolation, firewall blocking) that were successful against recurring infrastructure or malware."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "escalation_preferences",
+                        "description": "Organizational context regarding the specific individuals, departments, or Tier 2/3 analysts that need to be engaged or escalated to for particular alert categories."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "detection_rule_feedback",
+                        "description": "Feedback on overly noisy or poorly calibrated detection rules within the SIEM, including documented conditions that frequently trigger false positives."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "incident_response_status",
+                        "description": "The ongoing lifecycle status, assigned owners, and recent developments of active Incident Response Plans (IRPs) that bridge multiple days or shifts."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "threat_actor_profiles",
+                        "description": "Synthesized context about the specific Tactics, Techniques, and Procedures (TTPs) and behaviors of threat groups that have historically affected or are currently threatening the environment."
+                    }
+                },
+                {
+                    "custom_memory_topic": {
+                        "label": "tool_execution_quirks",
+                        "description": "Known API limitations, syntax requirements, or workarounds for specific SOAR, SIEM, or GTI tools to prevent the agent from repeatedly making the same syntax errors across sessions."
+                    }
                 }
             ]
         }
