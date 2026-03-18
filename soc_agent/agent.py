@@ -63,7 +63,7 @@ from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from google.adk.tools.retrieval import VertexAiRagRetrieval
 from google.adk.tools.load_memory_tool import LoadMemoryTool
 from google.adk.agents.context import Context
-from google.genai.types import GenerateContentConfig, AutomaticFunctionCallingConfig
+from google.genai.types import GenerateContentConfig, AutomaticFunctionCallingConfig, Part
 from mcp import StdioServerParameters
 
 
@@ -160,6 +160,27 @@ def fetch_full_document(gcs_uri: str) -> str:
         return blob.download_as_text()
     except Exception as e:
         return f"Failed to retrieve document: {str(e)}"
+
+async def save_report_artifact(filename: str, report_content: str, ctx: Context) -> str:
+    """
+    Saves a generated analysis, intelligence report, or investigation finding as an artifact.
+    MUST be called by the agent whenever you finalize a detailed report to formally save it to the system.
+    
+    Args:
+        filename: A logical filename for the report ending in .md (e.g. 'APT29_Analysis.md').
+        report_content: The complete markdown content of the report you generated.
+    """
+    try:
+        report_bytes = report_content.encode('utf-8')
+        report_artifact = Part.from_bytes(
+            data=report_bytes, mime_type="text/markdown"
+        )
+        version = await ctx.save_artifact(filename=filename, artifact=report_artifact)
+        return f"Successfully saved report '{filename}' as artifact version {version}."
+    except ValueError as e:
+        return f"Error saving report: {e}. ArtifactService might not be configured."
+    except Exception as e:
+        return f"An unexpected error occurred saving report: {e}"
 
 
 async def generate_memory(ctx: Context = None, callback_context: Context = None, **kwargs):
@@ -323,7 +344,7 @@ def create_agent():
     # ========================================================================
     logger.info("Creating CTI sub-agent...")
 
-    cti_tools = []
+    cti_tools = [save_report_artifact]
 
     # GTI tools for threat intelligence
     cti_tools.append(
@@ -444,7 +465,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
     # ========================================================================
     logger.info("Creating Tier 1 sub-agent...")
 
-    tier1_tools = []
+    tier1_tools = [save_report_artifact]
 
     # Chronicle for basic entity lookups
     tier1_tools.append(
@@ -557,7 +578,7 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
     logger.info("Creating main orchestrator agent...")
 
     # Build orchestrator tools list
-    orchestrator_tools = [fetch_full_document]
+    orchestrator_tools = [fetch_full_document, save_report_artifact]
 
     # Add RAG tool DIRECTLY to orchestrator (not via sub-agent) to preserve grounding citations
     if RAG_CORPUS_ID:
