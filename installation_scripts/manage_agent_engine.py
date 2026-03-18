@@ -12,7 +12,7 @@ import logging
 import os
 import re
 import sys
-import typing
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -731,6 +731,8 @@ class AgentEngineManager:
                 # OpenTelemetry Tracing and Logging
                 "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "TRUE",
                 "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "TRUE",
+                "OTEL_SERVICE_NAME": "adk-soc-agent",
+                "OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED": "TRUE",
             }
 
             # Add service account configuration based on authentication method
@@ -849,31 +851,51 @@ class AgentEngineManager:
 
     async def _async_test_agent(self, remote_app):
         """Async test function for agent engine."""
-        user_id = "test_user"
-        session = await remote_app.async_create_session(user_id=user_id)
-        typer.echo(f"Created session: {session.get('id')}")
+        fd, log_path = tempfile.mkstemp(suffix=".log", prefix="agent_test_")
+        typer.secho(f"\nRedirecting detailed test events to: {log_path}", fg=typer.colors.CYAN)
+        
+        with os.fdopen(fd, 'w') as log_file:
+            user_id = "test_user"
+            session = await remote_app.async_create_session(user_id=user_id)
+            session_id = session.get("id")
+            typer.echo(f"Created session: {session_id}")
+            log_file.write(f"Created session: {session_id}\n")
 
-        events = []
-        test_message = (
-            "Can you check our SOAR case management system to see if we have any currently open security cases that might relate to APT29?"
-        )
-        # test_message = "List rules with ursnif in the name."
-        # test_message = "List the first page of soar cases."
-
-        typer.echo(f"Sending test query: {test_message}")
-        async for event in remote_app.async_stream_query(
-            user_id=user_id, session_id=session.get("id"), message=test_message
-        ):
-            typer.echo(f"Event: {event}")
-            events.append(event)
-
-        if not events:
-            typer.secho(" No events received from agent!", fg=typer.colors.YELLOW)
-        else:
-            typer.secho(
-                f" Test completed successfully - received {len(events)} events",
-                fg=typer.colors.GREEN,
+            test_messages = (
+                "List rules with ursnif in the name.",  # Chronicle SIEM MCP
+                "List the first page of soar cases.",  # SOAR MCP
+                # memory save test
+                "For our future investigations, please note that we have a critical asset: MALWARETEST-WIN at IP 50.90.32.142. Please acknowledge this so we have it for future reference.",
+                # soar case search test
+                "Can you check our SOAR case management system to see if we have any currently open security cases that might relate to APT29?",
             )
+
+            for test_message in test_messages:
+                typer.echo(f"\nSending test query: {test_message}")
+                log_file.write(f"\n--- QUERY: {test_message} ---\n")
+                
+                events = []
+                async for event in remote_app.async_stream_query(
+                    user_id=user_id, session_id=session_id, message=test_message
+                ):
+                    log_file.write(f"Event: {event}\n")
+                    events.append(event)
+                    # Optional: Print a dot to show progress instead of full event
+                    print(".", end="", flush=True)
+                
+                print() # New line after dots
+
+                if not events:
+                    typer.secho(" No events received from agent!", fg=typer.colors.YELLOW)
+                    log_file.write("No events received from agent!\n")
+                else:
+                    typer.secho(
+                        f" Test completed successfully - received {len(events)} events",
+                        fg=typer.colors.GREEN,
+                    )
+                    log_file.write(f"Test completed successfully - received {len(events)} events\n")
+
+        typer.secho(f"\nDetailed logs available at: {log_path}\n", fg=typer.colors.CYAN)
 
     def warmup_mcp_servers(self, resource_name: str) -> bool:
         """
