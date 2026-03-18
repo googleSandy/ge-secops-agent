@@ -190,6 +190,33 @@ async def save_report_artifact(filename: str, report_content: str, ctx: Context)
         return f"An unexpected error occurred saving report: {e}"
 
 
+async def log_usage_metadata(ctx: Context):
+    """Logs the usage metadata from the most recent event to Cloud Logging."""
+    try:
+        if not ctx or not hasattr(ctx, 'session') or getattr(ctx.session, 'events', None) is None:
+            return
+            
+        # Look for the last event with usage_metadata (usually the model's response)
+        for event in reversed(ctx.session.events):
+            if hasattr(event, 'usage_metadata') and event.usage_metadata:
+                usage = event.usage_metadata
+                log_data = {
+                    "event_type": "agent_token_usage",
+                    "session_id": getattr(ctx.session, 'id', 'unknown'),
+                    "invocation_id": getattr(event, 'invocation_id', 'unknown'),
+                    "author": getattr(event, 'author', 'unknown'),
+                    "prompt_token_count": getattr(usage, 'prompt_token_count', 0),
+                    "candidates_token_count": getattr(usage, 'candidates_token_count', 0),
+                    "total_token_count": getattr(usage, 'total_token_count', 0),
+                }
+                # Emit a structured message for Cloud Logging
+                logger.info(f"USAGE_METADATA: {json.dumps(log_data)}")
+                break
+                
+    except Exception as e:
+        logger.warning(f"Failed to log usage metadata: {e}")
+
+
 async def generate_memory(ctx: Context = None, callback_context: Context = None, **kwargs):
     """
     Triggers memory generation for the current session.
@@ -199,6 +226,9 @@ async def generate_memory(ctx: Context = None, callback_context: Context = None,
     if not ctx:
         logger.warning("No context provided to generate_memory")
         return
+        
+    # Log usage metadata to Cloud Logging
+    await log_usage_metadata(ctx)
         
     try:
         await ctx.add_session_to_memory()
