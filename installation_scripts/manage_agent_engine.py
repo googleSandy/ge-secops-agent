@@ -688,6 +688,8 @@ class AgentEngineManager:
             # Dynamically import and create the agent from the specified module
             typer.echo(f"Importing agent from {agent_module}...")
             os.environ["REASONING_ENGINE_DEPLOYMENT"] = "True"
+            if "GOOGLE_CLOUD_PROJECT" not in os.environ and GCP_PROJECT_ID:
+                os.environ["GOOGLE_CLOUD_PROJECT"] = GCP_PROJECT_ID
             # Allow Vertex AI init - agents need it to use Vertex AI models instead of genai client
             try:
                 agent_pkg = importlib.import_module(agent_module)
@@ -709,10 +711,23 @@ class AgentEngineManager:
             agent = create_agent_func()
 
             # Create the ADK app
+            from google.adk.artifacts.gcs_artifact_service import GcsArtifactService
+
+            def build_artifact_service():
+                bucket_name = os.environ.get("GCP_ARTIFACT_BUCKET")
+                if not bucket_name:
+                    raise ValueError(
+                        "GCP_ARTIFACT_BUCKET is required for GcsArtifactService (set in .env)"
+                    )
+                if bucket_name.startswith("gs://"):
+                    bucket_name = bucket_name[5:]
+                return GcsArtifactService(bucket_name=bucket_name)
+
             typer.echo("Creating ADK app...")
             app = AdkApp(
                 agent=agent,
                 enable_tracing=True,
+                artifact_service_builder=build_artifact_service,
             )
             # Get environment variables for deployment
             # HYBRID APPROACH:
@@ -727,6 +742,7 @@ class AgentEngineManager:
                 "GCP_PROJECT_ID": os.environ.get("GCP_PROJECT_ID"),
                 "GCP_LOCATION": os.environ.get("GCP_LOCATION", "us-central1"),
                 "GCP_STAGING_BUCKET": os.environ.get("GCP_STAGING_BUCKET"),
+                "GCP_ARTIFACT_BUCKET": os.environ.get("GCP_ARTIFACT_BUCKET"),
                 "RAG_CORPUS_ID": os.environ.get("RAG_CORPUS_ID"),
                 "SOAR_URL": os.environ.get("SOAR_URL"),
                 "SOAR_APP_KEY": os.environ.get("SOAR_APP_KEY"),
@@ -873,6 +889,7 @@ class AgentEngineManager:
             log_file.write(f"Created session: {session_id}\n")
 
             test_messages = (
+                "Get the 2 documents on Malware and then fetch_full_document for both",
                 "List rules with ursnif in the name.",  # Chronicle SIEM MCP
                 "List the first page of soar cases.",  # SOAR MCP
                 # memory save test

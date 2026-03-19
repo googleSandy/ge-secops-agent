@@ -100,8 +100,11 @@ PYTHON_EXECUTABLE = (
 # Configure logging
 
 
-logging_client = google.cloud.logging.Client()
-logging_client.setup_logging()
+try:
+    logging_client = google.cloud.logging.Client()
+    logging_client.setup_logging()
+except Exception as e:
+    print(f"Warning: Cloud logging initialization failed: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +160,7 @@ The Tier 1 SOC Analyst is the first line of defense, responsible for monitoring 
 # ========================================================================
 
 
-def fetch_full_document(gcs_uri: str) -> str:
+async def fetch_full_document(gcs_uri: str, ctx: Context) -> str:
     """
     Fetches the complete document text from Google Cloud Storage.
 
@@ -192,7 +195,12 @@ def fetch_full_document(gcs_uri: str) -> str:
         logger.info(
             f"FETCH_FULL_DOC_SUCCESS: Retrieved document. Total size: {len(content)} characters, Total lines: {line_count}"
         )
-
+        logger.info("FETCH_FULL_DOC_CTX: Calling save_report_artifact automatically.")
+        base_name = blob_name.split("/")[-1]
+        if not base_name.endswith(".md"):
+            base_name += ".md"
+        filename = f"runbook_{base_name}"
+        await save_report_artifact(filename, content, ctx)
         return content
     except Exception as e:
         logger.error(
@@ -206,19 +214,30 @@ async def save_report_artifact(filename: str, report_content: str, ctx: Context)
     """
     Saves a generated analysis, intelligence report, or investigation finding as an artifact.
     MUST be called by the agent whenever you finalize a detailed report to formally save it to the system.
+    Also call whenever a document is obtained from fetch_full_document.
 
     Args:
         filename: A logical filename for the report ending in .md (e.g. 'APT29_Analysis.md').
         report_content: The complete markdown content of the report you generated.
     """
+    logger.info(f"SAVE_REPORT_ARTIFACT: Attempting to save {filename}")
     try:
         report_bytes = report_content.encode("utf-8")
         report_artifact = Part.from_bytes(data=report_bytes, mime_type="text/markdown")
         version = await ctx.save_artifact(filename=filename, artifact=report_artifact)
+        logger.info(
+            f"SAVE_REPORT_ARTIFACT_SUCCESS: Saved {filename} as version {version}"
+        )
         return f"Successfully saved report '{filename}' as artifact version {version}."
     except ValueError as e:
+        logger.error(
+            f"SAVE_REPORT_ARTIFACT_ERROR: ValueError - ArtifactService might not be configured: {e}"
+        )
         return f"Error saving report: {e}. ArtifactService might not be configured."
     except Exception as e:
+        logger.error(
+            f"SAVE_REPORT_ARTIFACT_ERROR: Unexpected error: {e}", exc_info=True
+        )
         return f"An unexpected error occurred saving report: {e}"
 
 
