@@ -250,9 +250,30 @@ async def save_report_artifact(filename: str, report_content: str, ctx: Context)
                     ):
                         session_id = ctx._invocation_context.session.id
 
-                    # Format: https://storage.cloud.google.com/<BUCKET>/<APP_ID>/<USER_ID>/<SESSION_ID>/<FILENAME>/<VERSION>
-                    gcs_url = f"https://storage.cloud.google.com/{bucket}/{app_name}/{user_id}/{session_id}/{filename}/{version}"
-                    link_to_provide = f"[{filename}]({gcs_url})"
+                    blob_name = (
+                        f"{app_name}/{user_id}/{session_id}/{filename}/{version}"
+                    )
+
+                    try:
+                        from datetime import timedelta
+
+                        from google.cloud import storage
+
+                        storage_client = storage.Client()
+                        bucket_obj = storage_client.bucket(bucket)
+                        blob_obj = bucket_obj.blob(blob_name)
+
+                        signed_url = blob_obj.generate_signed_url(
+                            version="v4", expiration=timedelta(hours=24), method="GET"
+                        )
+                        link_to_provide = f"[{filename}]({signed_url})"
+                    except Exception as sign_e:
+                        logger.warning(f"Could not generate signed url: {sign_e}")
+                        # Fallback to direct console link
+                        gcs_url = (
+                            f"https://storage.cloud.google.com/{bucket}/{blob_name}"
+                        )
+                        link_to_provide = f"[{filename}]({gcs_url})"
         except Exception as link_e:
             logger.warning(
                 f"Could not construct direct GCS link, falling back to artifact schema: {link_e}"
