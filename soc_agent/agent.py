@@ -565,6 +565,7 @@ INTELLIGENCE STANDARDS:
 
 CRITICAL: When formulating analysis plans, summarize your approach and ask for user permission before executing state-changing tools.""",
         tools=cti_tools,
+        after_agent_callback=generate_memory,
         generate_content_config=strict_config,
     )
 
@@ -677,6 +678,7 @@ IMPORTANT LIMITATIONS:
 
 CRITICAL: Summarize procedures and ask for user permission before executing state-changing tools.""",
         tools=tier1_tools,
+        after_agent_callback=generate_memory,
         generate_content_config=strict_config,
     )
 
