@@ -225,10 +225,43 @@ async def save_report_artifact(filename: str, report_content: str, ctx: Context)
         report_bytes = report_content.encode("utf-8")
         report_artifact = Part.from_bytes(data=report_bytes, mime_type="text/markdown")
         version = await ctx.save_artifact(filename=filename, artifact=report_artifact)
+
+        # Default to ADK protocol if we can't determine the bucket
+        link_to_provide = f"[{filename}](artifact://{filename})"
+
+        # Dynamically construct the real Google Cloud Storage URL if the GcsArtifactService is used
+        try:
+            if (
+                hasattr(ctx, "_invocation_context")
+                and ctx._invocation_context.artifact_service
+            ):
+                art_svc = ctx._invocation_context.artifact_service
+                if hasattr(art_svc, "bucket_name"):
+                    bucket = art_svc.bucket_name
+                    app_name = getattr(
+                        ctx._invocation_context, "app_name", "unknown_app"
+                    )
+                    user_id = getattr(
+                        ctx._invocation_context, "user_id", "unknown_user"
+                    )
+                    session_id = "unknown_session"
+                    if hasattr(ctx._invocation_context, "session") and hasattr(
+                        ctx._invocation_context.session, "id"
+                    ):
+                        session_id = ctx._invocation_context.session.id
+
+                    # Format: https://storage.cloud.google.com/<BUCKET>/<APP_ID>/<USER_ID>/<SESSION_ID>/<FILENAME>/<VERSION>
+                    gcs_url = f"https://storage.cloud.google.com/{bucket}/{app_name}/{user_id}/{session_id}/{filename}/{version}"
+                    link_to_provide = f"[{filename}]({gcs_url})"
+        except Exception as link_e:
+            logger.warning(
+                f"Could not construct direct GCS link, falling back to artifact schema: {link_e}"
+            )
+
         logger.info(
             f"SAVE_REPORT_ARTIFACT_SUCCESS: Saved {filename} as version {version}"
         )
-        return f"Successfully saved report '{filename}' as artifact version {version}. You MUST provide this exact link to the user in your final response: [{filename}](artifact://{filename})"
+        return f"Successfully saved report '{filename}'. You MUST provide this exact link to the user in your final response: {link_to_provide}"
     except ValueError as e:
         logger.error(
             f"SAVE_REPORT_ARTIFACT_ERROR: ValueError - ArtifactService might not be configured: {e}"
@@ -840,7 +873,7 @@ For complex requests, you may use multiple specialists sequentially:
 IMPORTANT GUIDELINES:
 - Always indicate which specialist you consulted or delegated to
 - **Preserve all grounding citations and source links** from RAG knowledge base results
-- **Artifact Linking:** Whenever a report or document is saved using the `save_report_artifact` tool, you MUST include the exact markdown link returned by the tool in your final response to the user. The format must be exactly: `[filename](artifact://filename)`.
+- **Artifact Linking:** Whenever a report or document is saved using the `save_report_artifact` tool, you MUST include the exact markdown link returned by the tool in your final response to the user.
 - Synthesize information from multiple specialists when needed
 - Provide orchestrator-level recommendations
 - Guide users through complex multi-step processes
