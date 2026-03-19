@@ -228,7 +228,7 @@ async def save_report_artifact(filename: str, report_content: str, ctx: Context)
         logger.info(
             f"SAVE_REPORT_ARTIFACT_SUCCESS: Saved {filename} as version {version}"
         )
-        return f"Successfully saved report '{filename}' as artifact version {version}."
+        return f"Successfully saved report '{filename}' as artifact version {version}. You MUST provide this exact link to the user in your final response: [{filename}](artifact://{filename})"
     except ValueError as e:
         logger.error(
             f"SAVE_REPORT_ARTIFACT_ERROR: ValueError - ArtifactService might not be configured: {e}"
@@ -293,6 +293,50 @@ async def generate_memory(
         await ctx.add_session_to_memory()
     except Exception as e:
         logger.warning(f"Failed to generate memory: {e}")
+
+
+async def before_tool_cache(tool, args, tool_context: Context, **kwargs):
+    """
+    Checks for a cached result before executing a tool.
+    This prevents redundant API calls and saves execution time/tokens.
+    """
+    try:
+        # Create a stable cache key from tool name and sorted arguments
+        cache_key = f"{tool.name}:{json.dumps(args, sort_keys=True)}"
+
+        # Access cache from the unified Context state
+        cache = tool_context.state.get("tool_result_cache", {})
+        if cache_key in cache:
+            logger.info(f"CACHE_HIT: Returning cached result for tool '{tool.name}'")
+            return cache[cache_key]
+    except Exception as e:
+        logger.warning(f"CACHE_ERROR: Failed to check tool cache: {e}")
+
+    return None  # Proceed to actual tool execution
+
+
+async def after_tool_cache(tool, args, tool_context: Context, tool_response, **kwargs):
+    """
+    Caches the tool result and triggers immediate memory sync.
+    This ensures the Vertex AI Memory Bank is updated in real-time during investigations.
+    """
+    try:
+        # Save to cache
+        cache_key = f"{tool.name}:{json.dumps(args, sort_keys=True)}"
+        if "tool_result_cache" not in tool_context.state:
+            tool_context.state["tool_result_cache"] = {}
+
+        tool_context.state["tool_result_cache"][cache_key] = tool_response
+        logger.info(f"CACHE_SAVE: Cached result for tool '{tool.name}'")
+
+        # Trigger immediate memory generation (Save to Vertex AI Memory Bank)
+        # This keeps the memory bank up-to-date even during long agent turns
+        await generate_memory(ctx=tool_context)
+
+    except Exception as e:
+        logger.warning(f"CACHE_ERROR: Failed to update tool cache or memory: {e}")
+
+    return tool_response  # Return result to the model
 
 
 def create_agent():
@@ -565,6 +609,8 @@ INTELLIGENCE STANDARDS:
 
 CRITICAL: When formulating analysis plans, summarize your approach and ask for user permission before executing state-changing tools.""",
         tools=cti_tools,
+        before_tool_callback=before_tool_cache,
+        after_tool_callback=after_tool_cache,
         after_agent_callback=generate_memory,
         generate_content_config=strict_config,
     )
@@ -678,6 +724,8 @@ IMPORTANT LIMITATIONS:
 
 CRITICAL: Summarize procedures and ask for user permission before executing state-changing tools.""",
         tools=tier1_tools,
+        before_tool_callback=before_tool_cache,
+        after_tool_callback=after_tool_cache,
         after_agent_callback=generate_memory,
         generate_content_config=strict_config,
     )
@@ -792,6 +840,7 @@ For complex requests, you may use multiple specialists sequentially:
 IMPORTANT GUIDELINES:
 - Always indicate which specialist you consulted or delegated to
 - **Preserve all grounding citations and source links** from RAG knowledge base results
+- **Artifact Linking:** Whenever a report or document is saved using the `save_report_artifact` tool, you MUST include the exact markdown link returned by the tool in your final response to the user. The format must be exactly: `[filename](artifact://filename)`.
 - Synthesize information from multiple specialists when needed
 - Provide orchestrator-level recommendations
 - Guide users through complex multi-step processes
@@ -836,6 +885,8 @@ Query: "Investigate suspicious activity from user john.doe - get the runbook fir
 Remember: Your role is to be an intelligent orchestrator that makes security operations more efficient through smart delegation and synthesis. Transfer control to specialists when their expertise is needed.""",
         tools=orchestrator_tools,
         sub_agents=[cti_subagent, tier1_subagent],  # LLM delegation to specialists
+        before_tool_callback=before_tool_cache,
+        after_tool_callback=after_tool_cache,
         after_agent_callback=generate_memory,
         generate_content_config=strict_config,
     )
