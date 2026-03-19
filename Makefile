@@ -11,7 +11,7 @@
 	agentspace-url agentspace-test agentspace-datastore agentspace-link-agent agentspace-unlink-agent \
 	agentspace-update-agent agentspace-list-agents agentspace-list-apps agentspace-create-app agentspace-redeploy \
 	datastore-create datastore-list datastore-info datastore-delete \
-	rag-list rag-info rag-create rag-delete rag-import rag-cleanup rag-cleanup-sync rag-cleanup-full \
+	rag-list rag-info rag-create rag-delete rag-import sync-runbooks sync-runbooks-validate sync-runbooks-gcs sync-runbooks-prune \
 	gcs-upload gcs-list gcs-delete gcs-validate gcs-uri gcs-bucket-create gcs-bucket-info \
 	vertex-ai-verify vertex-ai-enable-apis vertex-ai-quota \
 	oauth-setup oauth-create-auth oauth-verify oauth-delete \
@@ -93,7 +93,7 @@ help: ## Show this help message
 	@grep -h -E '^datastore-[^:]*:.*?## .*$$' Makefile | sed 's/:.*##/##/' | awk 'BEGIN {FS = "##"} {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "\033[1;32mRAG Corpus Management\033[0m"
-	@grep -h -E '^rag-[^:]*:.*?## .*$$' Makefile | sed 's/:.*##/##/' | awk 'BEGIN {FS = "##"} {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
+	@grep -h -E '^(rag|sync-runbooks)[^:]*:.*?## .*$$' Makefile | sed 's/:.*##/##/' | awk 'BEGIN {FS = "##"} {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "\033[1;36mGCS Management\033[0m"
 	@grep -h -E '^gcs-[^:]*:.*?## .*$$' Makefile | sed 's/:.*##/##/' | awk 'BEGIN {FS = "##"} {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
@@ -334,24 +334,18 @@ rag-import: ## Import files from GCS to RAG corpus (use: RAG_CORPUS_ID=<name> GC
 			--env-file $(ENV_FILE); \
 	fi
 
-# RAG Cleanup targets
-MANAGE_RAG_CLEANUP := installation_scripts/cleanup_rag_corpus.py
+# RAG Sync & Cleanup targets
+sync-runbooks: ## E2E Sync: Validate -> Rsync GCS -> Import RAG -> Prune Orphaned RAG Files
+	@$(PYTHON) $(MANAGE_RAG) sync-runbooks $(if $(RAG_CORPUS_ID),--corpus $(RAG_CORPUS_ID)) --env-file $(ENV_FILE)
 
-rag-cleanup: ## Analyze RAG corpus for cruft files (use V=1 for verbose list)
-	@$(PYTHON) $(MANAGE_RAG_CLEANUP) analyze $(VERBOSE) --env-file $(ENV_FILE)
+sync-runbooks-validate: ## Validate local markdown runbooks (size, encoding, markdown blocks)
+	@$(PYTHON) $(MANAGE_RAG) validate-md --env-file $(ENV_FILE)
 
-rag-cleanup-sync: ## Sync only valid runbooks to GCS (use: DRY_RUN=1 to preview)
-	@$(PYTHON) $(MANAGE_RAG_CLEANUP) sync-to-gcs \
-		$(if $(BUCKET),--bucket $(BUCKET)) \
-		$(if $(PREFIX),--prefix $(PREFIX)) \
-		$(if $(filter 1,$(DRY_RUN)),--dry-run) \
-		--env-file $(ENV_FILE)
+sync-runbooks-gcs: ## Sync only valid local runbooks to GCS, deleting orphaned GCS files
+	@$(PYTHON) $(MANAGE_RAG) sync-gcs --env-file $(ENV_FILE)
 
-rag-cleanup-full: ## Full cleanup: analyze, sync to GCS, show recreation commands
-	@$(PYTHON) $(MANAGE_RAG_CLEANUP) full-cleanup \
-		$(if $(BUCKET),--bucket $(BUCKET)) \
-		$(if $(PREFIX),--prefix $(PREFIX)) \
-		--env-file $(ENV_FILE)
+sync-runbooks-prune: ## Prune files from RAG Corpus that no longer exist in GCS
+	@$(PYTHON) $(MANAGE_RAG) prune-corpus $(if $(RAG_CORPUS_ID),$(RAG_CORPUS_ID)) --env-file $(ENV_FILE)
 
 # GCS Management targets
 gcs-upload: ## Upload local files to GCS (use: FILES="file1 file2" BUCKET=bucket-name RECURSIVE=1)

@@ -452,7 +452,7 @@ def create_agent():
     cti_skill_toolset = skill_toolset.SkillToolset(skills=[ioc_enrichment_skill])
     tier1_skill_toolset = skill_toolset.SkillToolset(skills=[malware_triage_skill])
 
-    cti_tools = [save_report_artifact, cti_skill_toolset]
+    cti_tools = [save_report_artifact, cti_skill_toolset, LoadMemoryTool()]
 
     # GTI tools for threat intelligence
     cti_tools.append(
@@ -541,6 +541,8 @@ ANALYTICAL APPROACH:
 5. Dissemination: Share findings through SOAR comments
 
 TOOL USAGE:
+- **LoadMemoryTool** (CONTEXT): Retrieve historical insights, actor profiles, and previous investigation findings.
+  - ALWAYS use this at the start of a research task to identify known patterns or previous encounters with an entity/actor.
 - **GTI (PRIMARY)**: Threat research, IOC analysis, actor tracking, collection reports, MITRE mapping
   - Specify which GTI tool you used (e.g., `get_ip_address_report()`, `get_file_report()`)
 - **Chronicle (CORRELATION)**: Validate threats locally, IOC hunting, prevalence checking
@@ -571,7 +573,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
     # ========================================================================
     logger.info("Creating Tier 1 sub-agent...")
 
-    tier1_tools = [save_report_artifact, tier1_skill_toolset]
+    tier1_tools = [save_report_artifact, tier1_skill_toolset, LoadMemoryTool()]
 
     # Chronicle for basic entity lookups
     tier1_tools.append(
@@ -654,6 +656,8 @@ Recommend escalation to Tier 2/3 when encountering:
 - Complex investigations beyond basic triage
 
 TOOL USAGE:
+- **LoadMemoryTool** (CONTEXT): Check for historical context, approved exceptions, and recurring false positive patterns.
+  - ALWAYS query memory before starting triage to avoid redundant work on known benign entities or tools.
 - **Chronicle (SIEM)**: Basic entity lookups and alert queries
   - When using `search_security_events()`, ALWAYS extract and present the UDM query from the response
 - **SOAR**: Create/update cases, add findings, manage status
@@ -720,6 +724,11 @@ You have direct access to:
 2. **fetch_full_document**:
    - Fetches the complete document text from GCS using a gs:// URI (e.g. found via the RAG tool)
    - Use for reading the complete text of a document to avoid truncation.
+
+3. **LoadMemoryTool** (Vertex AI Memory Bank):
+   - Retrieves historical context and tactical insights persisted from previous investigations.
+   - Use at the start of any new request to check for existing context on entities, alert types, or recurring patterns.
+   - Available topics to query: `analyst_notes`, `investigation_patterns`, `approved_exceptions`, `active_campaign_intelligence`, `asset_context`, `siem_query_snippets`, `containment_strategies`, `escalation_preferences`, `detection_rule_feedback`, `incident_response_status`, `threat_actor_profiles`, and `tool_execution_quirks`.
 
 You can delegate to 2 specialized agents:
 
