@@ -1,0 +1,565 @@
+TIMESTAMP                       SEVERITY  TEXT_PAYLOAD
+2026-03-20T16:42:05.320541Z     ERROR     Error during async stream generation: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.', 'status': 'INVALID_ARGUMENT'}}
+                                          Traceback (most recent call last):
+                                            File "/code/app/api/factory/python_file_api_builder.py", line 577, in _async_stream_json_generator
+                                              async for chunk in output:
+                                              ...<3 lines>...
+                                                yield encoded_chunk
+                                            File "/code/.venv/lib/python3.13/site-packages/vertexai/preview/reasoning_engines/templates/adk.py", line 1017, in async_stream_query
+                                              async for event in events_async:
+                                                  # Yield the event data as a dictionary
+                                                  yield _utils.dump_event_for_json(event)
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 632, in run_async
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 617, in _run_with_trace
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 853, in _exec_with_plugin
+                                              async for event in agen:
+                                              ...<64 lines>...
+                                                  yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 606, in execute
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/agents/base_agent.py", line 303, in run_async
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 479, in _run_async_impl
+                                              async for event in agen:
+                                              ...<5 lines>...
+                                                  should_pause = True
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 758, in run_async
+                                              async for event in agen:
+                                                last_event = event
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 835, in _run_one_step_async
+                                              async for llm_response in agen:
+                                              ...<13 lines>...
+                                                    yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1192, in _call_llm_async
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1175, in _call_llm_with_tracing
+                                              async for llm_response in agen:
+                                              ...<13 lines>...
+                                                yield llm_response
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1251, in _run_and_handle_error
+                                              async for response in agen:
+                                                yield response
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 395, in _run_and_handle_error
+                                              raise model_error
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 376, in _run_and_handle_error
+                                              async for llm_response in agen:
+                                              ...<5 lines>...
+                                                yield llm_response
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 266, in generate_content_async
+                                              raise ce
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 245, in generate_content_async
+                                              response = await self.api_client.aio.models.generate_content(
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              ...<3 lines>...
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/models.py", line 7697, in generate_content
+                                              return await self._generate_content(
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  model=model, contents=contents, config=parsed_config
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/models.py", line 6485, in _generate_content
+                                              response = await self._api_client.async_request(
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  'post', path, request_dict, http_options
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1448, in async_request
+                                              result = await self._async_request(
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  http_request=http_request, http_options=http_options, stream=False
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1381, in _async_request
+                                              return await self._async_retry(  # type: ignore[no-any-return]
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  self._async_request_once, http_request, stream
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+                                              do = await self.iter(retry_state=retry_state)
+                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+                                              result = await action(retry_state)
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/_utils.py", line 111, in inner
+                                              return call(*args, **kwargs)
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 413, in exc_check
+                                              raise retry_exc.reraise()
+                                                    ~~~~~~~~~~~~~~~~~^^
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 184, in reraise
+                                              raise self.last_attempt.result()
+                                                    ~~~~~~~~~~~~~~~~~~~~~~~~^^
+                                            File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+                                              return self.__get_result()
+                                                     ~~~~~~~~~~~~~~~~~^^
+                                            File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+                                              raise self._exception
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+                                              result = await fn(*args, **kwargs)
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1326, in _async_request_once
+                                              await errors.APIError.raise_for_async_response(response)
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 216, in raise_for_async_response
+                                              await cls.raise_error_async(status_code, response_json, response)
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 238, in raise_error_async
+                                              raise ClientError(status_code, response_json, response)
+                                          google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.', 'status': 'INVALID_ARGUMENT'}}
+2026-03-20T16:42:05.320518Z               google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.', 'status': 'INVALID_ARGUMENT'}}
+2026-03-20T16:42:05.320479Z                   raise ClientError(status_code, response_json, response)
+2026-03-20T16:42:05.320475Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 238, in raise_error_async
+2026-03-20T16:42:05.320472Z                   await cls.raise_error_async(status_code, response_json, response)
+2026-03-20T16:42:05.320470Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 216, in raise_for_async_response
+2026-03-20T16:42:05.320468Z                   await errors.APIError.raise_for_async_response(response)
+2026-03-20T16:42:05.320462Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1326, in _async_request_once
+2026-03-20T16:42:05.320460Z                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320458Z                   result = await fn(*args, **kwargs)
+2026-03-20T16:42:05.320455Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+2026-03-20T16:42:05.320453Z                   raise self._exception
+2026-03-20T16:42:05.320451Z                 File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+2026-03-20T16:42:05.320449Z                          ~~~~~~~~~~~~~~~~~^^
+2026-03-20T16:42:05.320447Z                   return self.__get_result()
+2026-03-20T16:42:05.320445Z                 File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+2026-03-20T16:42:05.320443Z                         ~~~~~~~~~~~~~~~~~~~~~~~~^^
+2026-03-20T16:42:05.320440Z                   raise self.last_attempt.result()
+2026-03-20T16:42:05.320439Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 184, in reraise
+2026-03-20T16:42:05.320436Z                         ~~~~~~~~~~~~~~~~~^^
+2026-03-20T16:42:05.320434Z                   raise retry_exc.reraise()
+2026-03-20T16:42:05.320432Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 413, in exc_check
+2026-03-20T16:42:05.320430Z                   return call(*args, **kwargs)
+2026-03-20T16:42:05.320428Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/_utils.py", line 111, in inner
+2026-03-20T16:42:05.320426Z                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320424Z                   result = await action(retry_state)
+2026-03-20T16:42:05.320422Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+2026-03-20T16:42:05.320420Z                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320418Z                   do = await self.iter(retry_state=retry_state)
+2026-03-20T16:42:05.320416Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+2026-03-20T16:42:05.320413Z                   ^
+2026-03-20T16:42:05.320412Z                   )
+2026-03-20T16:42:05.320410Z                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320407Z                       self._async_request_once, http_request, stream
+2026-03-20T16:42:05.320405Z                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320403Z                   return await self._async_retry(  # type: ignore[no-any-return]
+2026-03-20T16:42:05.320400Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1381, in _async_request
+2026-03-20T16:42:05.320398Z                   ^
+2026-03-20T16:42:05.320396Z                   )
+2026-03-20T16:42:05.320394Z                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320392Z                       http_request=http_request, http_options=http_options, stream=False
+2026-03-20T16:42:05.320389Z                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320387Z                   result = await self._async_request(
+2026-03-20T16:42:05.320385Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1448, in async_request
+2026-03-20T16:42:05.320382Z                   ^
+2026-03-20T16:42:05.320380Z                   )
+2026-03-20T16:42:05.320379Z                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320376Z                       'post', path, request_dict, http_options
+2026-03-20T16:42:05.320374Z                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320373Z                   response = await self._api_client.async_request(
+2026-03-20T16:42:05.320370Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/models.py", line 6485, in _generate_content
+2026-03-20T16:42:05.320363Z                   ^
+2026-03-20T16:42:05.320361Z                   )
+2026-03-20T16:42:05.320359Z                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320357Z                       model=model, contents=contents, config=parsed_config
+2026-03-20T16:42:05.320354Z                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320352Z                   return await self._generate_content(
+2026-03-20T16:42:05.320350Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/models.py", line 7697, in generate_content
+2026-03-20T16:42:05.320348Z                   ^
+2026-03-20T16:42:05.320346Z                   )
+2026-03-20T16:42:05.320344Z                   ...<3 lines>...
+2026-03-20T16:42:05.320342Z                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:42:05.320340Z                   response = await self.api_client.aio.models.generate_content(
+2026-03-20T16:42:05.320337Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 245, in generate_content_async
+2026-03-20T16:42:05.320335Z                   raise ce
+2026-03-20T16:42:05.320333Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 266, in generate_content_async
+2026-03-20T16:42:05.320331Z                     yield llm_response
+2026-03-20T16:42:05.320329Z                   ...<5 lines>...
+2026-03-20T16:42:05.320327Z                   async for llm_response in agen:
+2026-03-20T16:42:05.320325Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 376, in _run_and_handle_error
+2026-03-20T16:42:05.320323Z                   raise model_error
+2026-03-20T16:42:05.320321Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 395, in _run_and_handle_error
+2026-03-20T16:42:05.320319Z                     yield response
+2026-03-20T16:42:05.320317Z                   async for response in agen:
+2026-03-20T16:42:05.320314Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1251, in _run_and_handle_error
+2026-03-20T16:42:05.320312Z                     yield llm_response
+2026-03-20T16:42:05.320310Z                   ...<13 lines>...
+2026-03-20T16:42:05.320308Z                   async for llm_response in agen:
+2026-03-20T16:42:05.320306Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1175, in _call_llm_with_tracing
+2026-03-20T16:42:05.320304Z                     yield event
+2026-03-20T16:42:05.320302Z                   async for event in agen:
+2026-03-20T16:42:05.320300Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1192, in _call_llm_async
+2026-03-20T16:42:05.320297Z                         yield event
+2026-03-20T16:42:05.320295Z                   ...<13 lines>...
+2026-03-20T16:42:05.320293Z                   async for llm_response in agen:
+2026-03-20T16:42:05.320290Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 835, in _run_one_step_async
+2026-03-20T16:42:05.320288Z                     yield event
+2026-03-20T16:42:05.320286Z                     last_event = event
+2026-03-20T16:42:05.320284Z                   async for event in agen:
+2026-03-20T16:42:05.320282Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 758, in run_async
+2026-03-20T16:42:05.320280Z                       should_pause = True
+2026-03-20T16:42:05.320277Z                   ...<5 lines>...
+2026-03-20T16:42:05.320275Z                   async for event in agen:
+2026-03-20T16:42:05.320273Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 479, in _run_async_impl
+2026-03-20T16:42:05.320271Z                     yield event
+2026-03-20T16:42:05.320269Z                   async for event in agen:
+2026-03-20T16:42:05.320267Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/agents/base_agent.py", line 303, in run_async
+2026-03-20T16:42:05.320265Z                     yield event
+2026-03-20T16:42:05.320263Z                   async for event in agen:
+2026-03-20T16:42:05.320260Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 606, in execute
+2026-03-20T16:42:05.320258Z                       yield event
+2026-03-20T16:42:05.320255Z                   ...<64 lines>...
+2026-03-20T16:42:05.320253Z                   async for event in agen:
+2026-03-20T16:42:05.320250Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 853, in _exec_with_plugin
+2026-03-20T16:42:05.320248Z                     yield event
+2026-03-20T16:42:05.320246Z                   async for event in agen:
+2026-03-20T16:42:05.320244Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 617, in _run_with_trace
+2026-03-20T16:42:05.320241Z                     yield event
+2026-03-20T16:42:05.320238Z                   async for event in agen:
+2026-03-20T16:42:05.320236Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 632, in run_async
+2026-03-20T16:42:05.320234Z                       yield _utils.dump_event_for_json(event)
+2026-03-20T16:42:05.320231Z                       # Yield the event data as a dictionary
+2026-03-20T16:42:05.320229Z                   async for event in events_async:
+2026-03-20T16:42:05.320226Z                 File "/code/.venv/lib/python3.13/site-packages/vertexai/preview/reasoning_engines/templates/adk.py", line 1017, in async_stream_query
+2026-03-20T16:42:05.320223Z                     yield encoded_chunk
+2026-03-20T16:42:05.320220Z                   ...<3 lines>...
+2026-03-20T16:42:05.320218Z     ERROR     Traceback (most recent call last):
+                                            File "/code/app/api/factory/python_file_api_builder.py", line 577, in _async_stream_json_generator
+                                              async for chunk in output:
+2026-03-20T16:42:05.320196Z               [22]      ERROR:    Error during async stream generation: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.', 'status': 'INVALID_ARGUMENT'}}
+2026-03-20T16:42:03.878158Z     WARNING   max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:42:03.878076Z               [22]      WARNING:  max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:42:03.877672Z     INFO      Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:42:03.877627Z               [22]      INFO:     Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:42:03.857064759Z
+2026-03-20T16:42:03.856573008Z
+2026-03-20T16:42:03.856174657Z
+2026-03-20T16:42:03.855540896Z
+2026-03-20T16:42:03.855047925Z
+2026-03-20T16:42:03.854637094Z
+2026-03-20T16:42:03.854146743Z
+2026-03-20T16:42:03.853659902Z
+2026-03-20T16:42:03.853018990Z
+2026-03-20T16:42:03.714375Z     INFO      Generate memory response received.
+2026-03-20T16:42:03.714331Z               [22]      INFO:     Generate memory response received.
+2026-03-20T16:42:03.534737Z     INFO      USAGE_METADATA: {"event_type": "agent_token_usage", "session_id": "3605759872605356032", "invocation_id": "e-f999bef0-1687-4057-8cb8-6382bb791fe9", "author": "secops_assistant", "prompt_token_count": 3722, "candidates_token_count": 150, "total_token_count": 4600}
+2026-03-20T16:42:03.534609Z               [22]      INFO:     USAGE_METADATA: {"event_type": "agent_token_usage", "session_id": "3605759872605356032", "invocation_id": "e-f999bef0-1687-4057-8cb8-6382bb791fe9", "author": "secops_assistant", "prompt_token_count": 3722, "candidates_token_count": 150, "total_token_count": 4600}
+2026-03-20T16:42:03.534416Z     INFO      CACHE_SAVE: Cached result for tool 'save_report_artifact'
+2026-03-20T16:42:03.534333Z               [22]      INFO:     CACHE_SAVE: Cached result for tool 'save_report_artifact'
+2026-03-20T16:42:03.534237Z     INFO      SAVE_REPORT_ARTIFACT_SUCCESS: Saved Case_6300_Report.md as version 0
+2026-03-20T16:42:03.534197Z               [22]      INFO:     SAVE_REPORT_ARTIFACT_SUCCESS: Saved Case_6300_Report.md as version 0
+2026-03-20T16:42:03.534191Z     WARNING   Could not generate signed url: you need a private key to sign credentials.the credentials you are currently using <class 'google.auth.compute_engine.credentials.Credentials'> just contains a token. see https://googleapis.dev/python/google-api-core/latest/auth.html#setting-up-a-service-account for more details.
+2026-03-20T16:42:03.534112Z               [22]      WARNING:  Could not generate signed url: you need a private key to sign credentials.the credentials you are currently using <class 'google.auth.compute_engine.credentials.Credentials'> just contains a token. see https://googleapis.dev/python/google-api-core/latest/auth.html#setting-up-a-service-account for more details.
+2026-03-20T16:42:03.264375Z     INFO      SAVE_REPORT_ARTIFACT: Attempting to save Case_6300_Report.md
+2026-03-20T16:42:03.264336Z               [22]      INFO:     SAVE_REPORT_ARTIFACT: Attempting to save Case_6300_Report.md
+2026-03-20T16:42:03.138280351Z
+2026-03-20T16:42:03.137867Z     WARNING   Warning: there are non-text parts in the response: ['function_call'], returning concatenated text result from text parts. Check the full candidates.content.parts accessor to get the full model response.
+2026-03-20T16:42:03.137854Z               [22]      WARNING:  Warning: there are non-text parts in the response: ['function_call'], returning concatenated text result from text parts. Check the full candidates.content.parts accessor to get the full model response.
+2026-03-20T16:42:03.137660Z     INFO      Response received from the model.
+2026-03-20T16:42:03.137612Z               [22]      INFO:     Response received from the model.
+2026-03-20T16:41:50.118920Z     WARNING   max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:41:50.118867Z               [22]      WARNING:  max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:41:50.118541Z     INFO      Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:41:50.118424Z               [22]      INFO:     Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:41:50.099031318Z
+2026-03-20T16:41:50.098365916Z
+2026-03-20T16:41:50.097826025Z
+2026-03-20T16:41:50.097342494Z
+2026-03-20T16:41:50.096660142Z
+2026-03-20T16:41:50.095976441Z
+2026-03-20T16:41:50.094624038Z
+2026-03-20T16:41:49.866526Z               [22]      INFO:     169.254.169.126:51584 - "POST /api/stream_reasoning_engine HTTP/1.1" 200 OK
+2026-03-20T16:39:52.255133Z     ERROR     Error during async stream generation: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.', 'status': 'INVALID_ARGUMENT'}}
+                                          Traceback (most recent call last):
+                                            File "/code/app/api/factory/python_file_api_builder.py", line 577, in _async_stream_json_generator
+                                              async for chunk in output:
+                                              ...<3 lines>...
+                                                yield encoded_chunk
+                                            File "/code/.venv/lib/python3.13/site-packages/vertexai/preview/reasoning_engines/templates/adk.py", line 1017, in async_stream_query
+                                              async for event in events_async:
+                                                  # Yield the event data as a dictionary
+                                                  yield _utils.dump_event_for_json(event)
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 632, in run_async
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 617, in _run_with_trace
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 853, in _exec_with_plugin
+                                              async for event in agen:
+                                              ...<64 lines>...
+                                                  yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 606, in execute
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/agents/base_agent.py", line 303, in run_async
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 479, in _run_async_impl
+                                              async for event in agen:
+                                              ...<5 lines>...
+                                                  should_pause = True
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 758, in run_async
+                                              async for event in agen:
+                                                last_event = event
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 835, in _run_one_step_async
+                                              async for llm_response in agen:
+                                              ...<13 lines>...
+                                                    yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1192, in _call_llm_async
+                                              async for event in agen:
+                                                yield event
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1175, in _call_llm_with_tracing
+                                              async for llm_response in agen:
+                                              ...<13 lines>...
+                                                yield llm_response
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1251, in _run_and_handle_error
+                                              async for response in agen:
+                                                yield response
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 395, in _run_and_handle_error
+                                              raise model_error
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 376, in _run_and_handle_error
+                                              async for llm_response in agen:
+                                              ...<5 lines>...
+                                                yield llm_response
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 266, in generate_content_async
+                                              raise ce
+                                            File "/code/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 245, in generate_content_async
+                                              response = await self.api_client.aio.models.generate_content(
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              ...<3 lines>...
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/models.py", line 7697, in generate_content
+                                              return await self._generate_content(
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  model=model, contents=contents, config=parsed_config
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/models.py", line 6485, in _generate_content
+                                              response = await self._api_client.async_request(
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  'post', path, request_dict, http_options
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1448, in async_request
+                                              result = await self._async_request(
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  http_request=http_request, http_options=http_options, stream=False
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1381, in _async_request
+                                              return await self._async_retry(  # type: ignore[no-any-return]
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  self._async_request_once, http_request, stream
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                              )
+                                              ^
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+                                              do = await self.iter(retry_state=retry_state)
+                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+                                              result = await action(retry_state)
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/_utils.py", line 111, in inner
+                                              return call(*args, **kwargs)
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 413, in exc_check
+                                              raise retry_exc.reraise()
+                                                    ~~~~~~~~~~~~~~~~~^^
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 184, in reraise
+                                              raise self.last_attempt.result()
+                                                    ~~~~~~~~~~~~~~~~~~~~~~~~^^
+                                            File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+                                              return self.__get_result()
+                                                     ~~~~~~~~~~~~~~~~~^^
+                                            File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+                                              raise self._exception
+                                            File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+                                              result = await fn(*args, **kwargs)
+                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1326, in _async_request_once
+                                              await errors.APIError.raise_for_async_response(response)
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 216, in raise_for_async_response
+                                              await cls.raise_error_async(status_code, response_json, response)
+                                            File "/code/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 238, in raise_error_async
+                                              raise ClientError(status_code, response_json, response)
+                                          google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.', 'status': 'INVALID_ARGUMENT'}}
+2026-03-20T16:39:52.255110Z               google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.', 'status': 'INVALID_ARGUMENT'}}
+2026-03-20T16:39:52.255059Z                   raise ClientError(status_code, response_json, response)
+2026-03-20T16:39:52.255055Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 238, in raise_error_async
+2026-03-20T16:39:52.255052Z                   await cls.raise_error_async(status_code, response_json, response)
+2026-03-20T16:39:52.255050Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/errors.py", line 216, in raise_for_async_response
+2026-03-20T16:39:52.255047Z                   await errors.APIError.raise_for_async_response(response)
+2026-03-20T16:39:52.255041Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1326, in _async_request_once
+2026-03-20T16:39:52.255039Z                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.255036Z                   result = await fn(*args, **kwargs)
+2026-03-20T16:39:52.255034Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 116, in __call__
+2026-03-20T16:39:52.255032Z                   raise self._exception
+2026-03-20T16:39:52.255029Z                 File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+2026-03-20T16:39:52.255027Z                          ~~~~~~~~~~~~~~~~~^^
+2026-03-20T16:39:52.255025Z                   return self.__get_result()
+2026-03-20T16:39:52.255022Z                 File "/usr/local/lib/python3.13/concurrent/futures/_base.py", line 449, in result
+2026-03-20T16:39:52.255020Z                         ~~~~~~~~~~~~~~~~~~~~~~~~^^
+2026-03-20T16:39:52.255018Z                   raise self.last_attempt.result()
+2026-03-20T16:39:52.255015Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 184, in reraise
+2026-03-20T16:39:52.255013Z                         ~~~~~~~~~~~~~~~~~^^
+2026-03-20T16:39:52.255010Z                   raise retry_exc.reraise()
+2026-03-20T16:39:52.255007Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/__init__.py", line 413, in exc_check
+2026-03-20T16:39:52.255005Z                   return call(*args, **kwargs)
+2026-03-20T16:39:52.255003Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/_utils.py", line 111, in inner
+2026-03-20T16:39:52.255001Z                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254998Z                   result = await action(retry_state)
+2026-03-20T16:39:52.254996Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 157, in iter
+2026-03-20T16:39:52.254993Z                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254990Z                   do = await self.iter(retry_state=retry_state)
+2026-03-20T16:39:52.254988Z                 File "/code/.venv/lib/python3.13/site-packages/tenacity/asyncio/__init__.py", line 112, in __call__
+2026-03-20T16:39:52.254985Z                   ^
+2026-03-20T16:39:52.254984Z                   )
+2026-03-20T16:39:52.254981Z                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254979Z                       self._async_request_once, http_request, stream
+2026-03-20T16:39:52.254977Z                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254975Z                   return await self._async_retry(  # type: ignore[no-any-return]
+2026-03-20T16:39:52.254972Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1381, in _async_request
+2026-03-20T16:39:52.254970Z                   ^
+2026-03-20T16:39:52.254968Z                   )
+2026-03-20T16:39:52.254966Z                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254964Z                       http_request=http_request, http_options=http_options, stream=False
+2026-03-20T16:39:52.254961Z                            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254958Z                   result = await self._async_request(
+2026-03-20T16:39:52.254957Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/_api_client.py", line 1448, in async_request
+2026-03-20T16:39:52.254954Z                   ^
+2026-03-20T16:39:52.254952Z                   )
+2026-03-20T16:39:52.254949Z                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254947Z                       'post', path, request_dict, http_options
+2026-03-20T16:39:52.254945Z                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254942Z                   response = await self._api_client.async_request(
+2026-03-20T16:39:52.254940Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/models.py", line 6485, in _generate_content
+2026-03-20T16:39:52.254938Z                   ^
+2026-03-20T16:39:52.254936Z                   )
+2026-03-20T16:39:52.254933Z                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254931Z                       model=model, contents=contents, config=parsed_config
+2026-03-20T16:39:52.254928Z                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254925Z                   return await self._generate_content(
+2026-03-20T16:39:52.254923Z                 File "/code/.venv/lib/python3.13/site-packages/google/genai/models.py", line 7697, in generate_content
+2026-03-20T16:39:52.254921Z                   ^
+2026-03-20T16:39:52.254919Z                   )
+2026-03-20T16:39:52.254916Z                   ...<3 lines>...
+2026-03-20T16:39:52.254914Z                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-03-20T16:39:52.254911Z                   response = await self.api_client.aio.models.generate_content(
+2026-03-20T16:39:52.254909Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 245, in generate_content_async
+2026-03-20T16:39:52.254906Z                   raise ce
+2026-03-20T16:39:52.254904Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/models/google_llm.py", line 266, in generate_content_async
+2026-03-20T16:39:52.254902Z                     yield llm_response
+2026-03-20T16:39:52.254899Z                   ...<5 lines>...
+2026-03-20T16:39:52.254897Z                   async for llm_response in agen:
+2026-03-20T16:39:52.254895Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 376, in _run_and_handle_error
+2026-03-20T16:39:52.254892Z                   raise model_error
+2026-03-20T16:39:52.254890Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 395, in _run_and_handle_error
+2026-03-20T16:39:52.254888Z                     yield response
+2026-03-20T16:39:52.254885Z                   async for response in agen:
+2026-03-20T16:39:52.254883Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1251, in _run_and_handle_error
+2026-03-20T16:39:52.254880Z                     yield llm_response
+2026-03-20T16:39:52.254878Z                   ...<13 lines>...
+2026-03-20T16:39:52.254876Z                   async for llm_response in agen:
+2026-03-20T16:39:52.254873Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1175, in _call_llm_with_tracing
+2026-03-20T16:39:52.254870Z                     yield event
+2026-03-20T16:39:52.254868Z                   async for event in agen:
+2026-03-20T16:39:52.254865Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 1192, in _call_llm_async
+2026-03-20T16:39:52.254863Z                         yield event
+2026-03-20T16:39:52.254860Z                   ...<13 lines>...
+2026-03-20T16:39:52.254858Z                   async for llm_response in agen:
+2026-03-20T16:39:52.254855Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 835, in _run_one_step_async
+2026-03-20T16:39:52.254852Z                     yield event
+2026-03-20T16:39:52.254849Z                     last_event = event
+2026-03-20T16:39:52.254846Z                   async for event in agen:
+2026-03-20T16:39:52.254844Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/flows/llm_flows/base_llm_flow.py", line 758, in run_async
+2026-03-20T16:39:52.254841Z                       should_pause = True
+2026-03-20T16:39:52.254838Z                   ...<5 lines>...
+2026-03-20T16:39:52.254831Z                   async for event in agen:
+2026-03-20T16:39:52.254827Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/agents/llm_agent.py", line 479, in _run_async_impl
+2026-03-20T16:39:52.254825Z                     yield event
+2026-03-20T16:39:52.254823Z                   async for event in agen:
+2026-03-20T16:39:52.254820Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/agents/base_agent.py", line 303, in run_async
+2026-03-20T16:39:52.254817Z                     yield event
+2026-03-20T16:39:52.254815Z                   async for event in agen:
+2026-03-20T16:39:52.254812Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 606, in execute
+2026-03-20T16:39:52.254809Z                       yield event
+2026-03-20T16:39:52.254806Z                   ...<64 lines>...
+2026-03-20T16:39:52.254803Z                   async for event in agen:
+2026-03-20T16:39:52.254800Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 853, in _exec_with_plugin
+2026-03-20T16:39:52.254797Z                     yield event
+2026-03-20T16:39:52.254794Z                   async for event in agen:
+2026-03-20T16:39:52.254792Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 617, in _run_with_trace
+2026-03-20T16:39:52.254790Z                     yield event
+2026-03-20T16:39:52.254787Z                   async for event in agen:
+2026-03-20T16:39:52.254784Z                 File "/code/.venv/lib/python3.13/site-packages/google/adk/runners.py", line 632, in run_async
+2026-03-20T16:39:52.254781Z                       yield _utils.dump_event_for_json(event)
+2026-03-20T16:39:52.254779Z                       # Yield the event data as a dictionary
+2026-03-20T16:39:52.254775Z                   async for event in events_async:
+2026-03-20T16:39:52.254771Z                 File "/code/.venv/lib/python3.13/site-packages/vertexai/preview/reasoning_engines/templates/adk.py", line 1017, in async_stream_query
+2026-03-20T16:39:52.254768Z                     yield encoded_chunk
+2026-03-20T16:39:52.254766Z                   ...<3 lines>...
+2026-03-20T16:39:52.254764Z     ERROR     Traceback (most recent call last):
+                                            File "/code/app/api/factory/python_file_api_builder.py", line 577, in _async_stream_json_generator
+                                              async for chunk in output:
+2026-03-20T16:39:52.254741Z               [17]      ERROR:    Error during async stream generation: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Request contains an invalid argument.', 'status': 'INVALID_ARGUMENT'}}
+2026-03-20T16:39:51.096722Z     WARNING   max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:39:51.096671Z               [17]      WARNING:  max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:39:51.096275Z     INFO      Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:39:51.096241Z               [17]      INFO:     Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:39:51.075964807Z
+2026-03-20T16:39:51.075491876Z
+2026-03-20T16:39:51.075061745Z
+2026-03-20T16:39:51.074562474Z
+2026-03-20T16:39:51.074039933Z
+2026-03-20T16:39:51.073385912Z
+2026-03-20T16:39:50.938696Z     INFO      Generate memory response received.
+2026-03-20T16:39:50.938656Z               [17]      INFO:     Generate memory response received.
+2026-03-20T16:39:50.777041Z     INFO      USAGE_METADATA: {"event_type": "agent_token_usage", "session_id": "3605759872605356032", "invocation_id": "e-3d88a9e3-5aa7-4e26-9235-a08a4c7f913a", "author": "secops_assistant", "prompt_token_count": 3336, "candidates_token_count": 12, "total_token_count": 3561}
+2026-03-20T16:39:50.776955Z               [17]      INFO:     USAGE_METADATA: {"event_type": "agent_token_usage", "session_id": "3605759872605356032", "invocation_id": "e-3d88a9e3-5aa7-4e26-9235-a08a4c7f913a", "author": "secops_assistant", "prompt_token_count": 3336, "candidates_token_count": 12, "total_token_count": 3561}
+2026-03-20T16:39:50.776897Z     INFO      CACHE_SAVE: Cached result for tool 'load_memory'
+2026-03-20T16:39:50.776886Z               [17]      INFO:     CACHE_SAVE: Cached result for tool 'load_memory'
+2026-03-20T16:39:50.776629Z     INFO      Search memory response received.
+2026-03-20T16:39:50.776587Z               [17]      INFO:     Search memory response received.
+2026-03-20T16:39:50.239711853Z
+2026-03-20T16:39:50.239459Z     WARNING   Warning: there are non-text parts in the response: ['function_call'], returning concatenated text result from text parts. Check the full candidates.content.parts accessor to get the full model response.
+2026-03-20T16:39:50.239433Z               [17]      WARNING:  Warning: there are non-text parts in the response: ['function_call'], returning concatenated text result from text parts. Check the full candidates.content.parts accessor to get the full model response.
+2026-03-20T16:39:50.239389Z     INFO      Response received from the model.
+2026-03-20T16:39:50.239342Z               [17]      INFO:     Response received from the model.
+2026-03-20T16:39:43.337372Z     WARNING   max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:39:43.337359Z               [17]      WARNING:  max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:39:43.336455Z     INFO      Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:39:43.336379Z               [17]      INFO:     Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:39:43.317697765Z
+2026-03-20T16:39:43.317193664Z
+2026-03-20T16:39:43.316517373Z
+2026-03-20T16:39:43.315479010Z
+2026-03-20T16:39:43.081868Z               [17]      INFO:     169.254.169.126:58698 - "POST /api/stream_reasoning_engine HTTP/1.1" 200 OK
+2026-03-20T16:39:02.367396Z     INFO      Generate memory response received.
+2026-03-20T16:39:02.366986Z               [23]      INFO:     Generate memory response received.
+2026-03-20T16:39:02.221111Z     INFO      USAGE_METADATA: {"event_type": "agent_token_usage", "session_id": "3605759872605356032", "invocation_id": "e-c040326f-26d9-4b3d-bbe5-d4c6d106ba26", "author": "secops_assistant", "prompt_token_count": 3228, "candidates_token_count": 96, "total_token_count": 4613}
+2026-03-20T16:39:02.221071Z               [23]      INFO:     USAGE_METADATA: {"event_type": "agent_token_usage", "session_id": "3605759872605356032", "invocation_id": "e-c040326f-26d9-4b3d-bbe5-d4c6d106ba26", "author": "secops_assistant", "prompt_token_count": 3228, "candidates_token_count": 96, "total_token_count": 4613}
+2026-03-20T16:39:02.096334740Z
+2026-03-20T16:39:02.095991Z     INFO      Response received from the model.
+2026-03-20T16:39:02.095945Z               [23]      INFO:     Response received from the model.
+2026-03-20T16:38:44.074847Z     WARNING   max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:38:44.074737Z               [23]      WARNING:  max_remote_calls in automatic_function_calling_config 0 is less than or equal to 0. Disabling automatic function calling. Please set max_remote_calls to a positive integer.
+2026-03-20T16:38:44.074457Z     INFO      Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:38:44.074403Z               [23]      INFO:     Sending out request, model: gemini-3.1-pro-preview, backend: GoogleLLMVariant.VERTEX_AI, stream: False
+2026-03-20T16:38:44.054367966Z
+2026-03-20T16:38:44.053321403Z
+2026-03-20T16:38:43.778780Z               [23]      INFO:     169.254.169.126:33660 - "POST /api/stream_reasoning_engine HTTP/1.1" 200 OK

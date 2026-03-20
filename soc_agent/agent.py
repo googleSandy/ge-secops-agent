@@ -74,6 +74,8 @@ from google.genai.types import (  # noqa: E402
 )
 from mcp import StdioServerParameters  # noqa: E402
 
+from soc_agent.tools.a2ui_renderer import render_dashboard  # noqa: E402
+
 
 # Monkey-patch version property to prevent Vertex AI Agent Engine serialization errors
 # The Vertex AI telemetry/instrumentation sometimes searches for '.version' on models/tools
@@ -84,7 +86,8 @@ AgentTool.version = "1.0"
 # Explicitly disable the automatic execution loop
 strict_config = GenerateContentConfig(
     automatic_function_calling=AutomaticFunctionCallingConfig(
-        disable=True, maximum_remote_calls=0
+        # maximum_remote_calls=0 # commenting out as this is possibly source of "400 INVALID_ARGUMENT." error when using gemini 3.1
+        disable=True
     ),
 )
 
@@ -492,6 +495,9 @@ def create_agent():
     RAG_SIMILARITY_TOP_K = int(os.environ.get("RAG_SIMILARITY_TOP_K", "10"))
     RAG_DISTANCE_THRESHOLD = float(os.environ.get("RAG_DISTANCE_THRESHOLD", "0.6"))
 
+    # A2UI Configuration
+    A2UI_ENABLED = os.environ.get("A2UI_ENABLED", "False") == "True"
+
     # Debug mode
     DEBUG = os.environ.get("DEBUG", "False") == "True"
     if DEBUG:
@@ -794,6 +800,9 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
     # Build orchestrator tools list
     orchestrator_tools = [fetch_full_document, save_report_artifact]
 
+    if A2UI_ENABLED:
+        orchestrator_tools.append(render_dashboard)
+
     # Add RAG tool DIRECTLY to orchestrator (not via sub-agent) to preserve grounding citations
     if RAG_CORPUS_ID:
         orchestrator_tools.append(
@@ -809,52 +818,57 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
     # Add Memory Search tool
     orchestrator_tools.append(LoadMemoryTool())
 
-    # Create orchestrator with LLM delegation to specialists (as sub_agents or AgentTool wrappers)
-    orchestrator = Agent(
-        name="secops_assistant",
-        model="gemini-3.1-pro-preview",
-        description="SecOps Security Agent - An intelligent SOC orchestrator for Google SecOps that delegates security operations to specialized persona-based agents.",
-        instruction="""You are the SecOps Security Agent orchestrator for Google SecOps - a sophisticated coordinator that intelligently delegates security operations to specialized persona-based agents and retrieves knowledge base documentation.
+    # Build orchestrator instruction
+    orchestrator_instruction = """You are the SecOps Security Agent orchestrator for Google SecOps - a sophisticated coordinator that intelligently delegates security operations to specialized persona-based agents and retrieves knowledge base documentation.
 
 YOUR ARCHITECTURE:
-You have direct access to:
+You have direct access to several tools and can delegate to specialized sub-agents.
+
+### DIRECT TOOLS (You call these directly):
 
 1. **retrieve_agentic_soc_runbooks** (RAG Knowledge Base):
-   - Directly retrieves SOC runbooks, IRPs, procedures, and documentation from RAG corpus
-   - Use for: "What's the procedure for...", "Show me the runbook for...", "How do we handle...", "What are the steps for...", "What is the runbook for...",
-     "What is the procedure for...", "What is our IRP for...", etc.
+   - Directly retrieves SOC runbooks, IRPs, procedures, and documentation from RAG corpus.
    - **IMPORTANT:** This tool provides grounding citations - preserve them in your response!
 
 2. **fetch_full_document**:
-   - Fetches the complete document text from GCS using a gs:// URI (e.g. found via the RAG tool)
+   - Fetches the complete document text from GCS using a gs:// URI.
    - Use for reading the complete text of a document to avoid truncation.
+"""
 
-3. **LoadMemoryTool** (Vertex AI Memory Bank):
+    if A2UI_ENABLED:
+        orchestrator_instruction += """
+3. **render_dashboard** (Visual Interface tool):
+   - Converts raw data (JSON lists, alert summaries, etc.) into rich A2UI dashboards.
+   - Use for: "Show me a dashboard of...", "Provide a visual report for...", "Create a summary view of..."
+   - **IMPORTANT:** This tool returns a special block of text and JSON. You MUST output this EXACT result directly to the user as part of your final response to enable rendering.
+"""
+
+    orchestrator_instruction += """
+4. **LoadMemoryTool** (Vertex AI Memory Bank):
    - Retrieves historical context and tactical insights persisted from previous investigations.
-   - Use at the start of any new request to check for existing context on entities, alert types, or recurring patterns.
-   - Available topics to query: `analyst_notes`, `investigation_patterns`, `approved_exceptions`, `active_campaign_intelligence`, `asset_context`, `siem_query_snippets`, `containment_strategies`, `escalation_preferences`, `detection_rule_feedback`, `incident_response_status`, `threat_actor_profiles`, and `tool_execution_quirks`.
 
-You can delegate to 2 specialized agents:
+### SPECIALIZED SUB-AGENTS (You delegate to these):
 
-2. **cti_researcher** (Threat Intelligence specialist):
-   - Deep threat research, actor analysis, malware investigation, IOC analysis
-   - Tools: GTI (primary), SecOps SIEM (correlation), SecOps SOAR (dissemination), SCC
-   - Use for: "Analyze this threat actor...", "Research this malware...", "What TTPs are associated with..."
-   - Also handles: Quick threat lookups, IOC reputation checks, general security queries
+1. **cti_researcher** (Threat Intelligence specialist):
+   - Deep threat research, actor analysis, malware investigation, IOC analysis.
 
-3. **tier1_analyst** (Alert Triage specialist):
-   - Initial alert triage, basic investigation, false positive identification
-   - Tools: SecOps SIEM (basic lookups), SecOps SOAR (case management), GTI (basic reputation)
-   - Use for: "Triage this alert...", "Is this a false positive...", "Initial assessment of..."
-   - Also handles: Quick SIEM/SOAR queries, case status checks
+2. **tier1_analyst** (Alert Triage specialist):
+   - Initial alert triage, basic investigation, false positive identification.
 
 DELEGATION STRATEGY:
-1. Analyze the user's request to determine the type of work required
-2. For runbook/procedure queries: Use retrieve_agentic_soc_runbooks directly
-3. For threat intelligence: Delegate to cti_researcher
-4. For alert triage/investigation: Delegate to tier1_analyst
-5. For complex workflows: Combine multiple specialists sequentially
-6. Synthesize results and provide orchestrator-level recommendations
+1. Analyze the user's request to determine the type of work required.
+2. For runbook/procedure queries: Use `retrieve_agentic_soc_runbooks` directly.
+3. For threat intelligence: Delegate to `cti_researcher`.
+4. For alert triage/investigation: Delegate to `tier1_analyst`.
+"""
+
+    if A2UI_ENABLED:
+        orchestrator_instruction += """
+5. For visual requests: Gather data first (via sub-agents or tools), then call `render_dashboard` with that data.
+"""
+
+    orchestrator_instruction += """
+6. Synthesize results and provide orchestrator-level recommendations.
 
 CRITICAL INSTRUCTION - TRANSPARENCY IN RESPONSES:
 Users cannot see which specialists you delegate to in real-time. You MUST include transparency in your response text.
@@ -883,7 +897,19 @@ EXAMPLE - EXCELLENT transparency for SIEM:
 metadata.event_type = 'USER_LOGIN' AND metadata.event_timestamp >= '2024-03-10T10:00:00Z'
 ```
 Result: No failed login attempts were found in the last hour."
+"""
 
+    if A2UI_ENABLED:
+        orchestrator_instruction += """
+EXAMPLE - Dashboard request:
+User: "Show me a visual dashboard of the latest high priority alerts."
+1. Delegate to Tier 1 analyst to search for alerts.
+2. Receive raw alerts data.
+3. Call `render_dashboard(data_to_render="[Raw alerts JSON]", requested_layout="A grid of high severity alert cards with summaries")`.
+4. Return the result of the tool to the user.
+"""
+
+    orchestrator_instruction += """
 MULTI-AGENT WORKFLOWS:
 For complex requests, you may use multiple specialists sequentially:
 - "Let me first check our runbooks, then correlate with threat intelligence..."
@@ -895,6 +921,14 @@ IMPORTANT GUIDELINES:
 - Always indicate which specialist you consulted or delegated to
 - **Preserve all grounding citations and source links** from RAG knowledge base results
 - **Artifact Linking:** Whenever a report or document is saved using the `save_report_artifact` tool, you MUST include the exact markdown link returned by the tool in your final response to the user.
+"""
+
+    if A2UI_ENABLED:
+        orchestrator_instruction += """
+- **Visual Dashboards:** If you call `render_dashboard`, you MUST include its output in your response to the user. It is safe to append it to your natural language text.
+"""
+
+    orchestrator_instruction += """
 - Synthesize information from multiple specialists when needed
 - Provide orchestrator-level recommendations
 - Guide users through complex multi-step processes
@@ -936,7 +970,14 @@ Query: "Investigate suspicious activity from user john.doe - get the runbook fir
 → Action: Use retrieve_agentic_soc_runbooks, then delegate to tier1_analyst
 → Response: Present the runbook with grounding citations, then present the investigation results from tier1_analyst
 
-Remember: Your role is to be an intelligent orchestrator that makes security operations more efficient through smart delegation and synthesis. Transfer control to specialists when their expertise is needed.""",
+Remember: Your role is to be an intelligent orchestrator that makes security operations more efficient through smart delegation and synthesis. Transfer control to specialists when their expertise is needed."""
+
+    # Create orchestrator with LLM delegation to specialists (as sub_agents or AgentTool wrappers)
+    orchestrator = Agent(
+        name="secops_assistant",
+        model="gemini-3.1-pro-preview",
+        description="SecOps Security Agent - An intelligent SOC orchestrator for Google SecOps that delegates security operations to specialized persona-based agents.",
+        instruction=orchestrator_instruction,
         tools=orchestrator_tools,
         sub_agents=[cti_subagent, tier1_subagent],  # LLM delegation to specialists
         before_tool_callback=before_tool_cache,
@@ -948,6 +989,8 @@ Remember: Your role is to be an intelligent orchestrator that makes security ope
     tools_description = []
     if RAG_CORPUS_ID:
         tools_description.append("RAG knowledge base")
+    if A2UI_ENABLED:
+        tools_description.append("render_dashboard tool")
     tools_description.extend(
         [
             "fetch_full_document tool",

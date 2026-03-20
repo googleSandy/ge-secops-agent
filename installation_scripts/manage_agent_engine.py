@@ -813,6 +813,10 @@ class AgentEngineManager:
                     "google-cloud-securitycenter>=1.38.0",
                     "google-cloud-asset>=3.15.0",
                     "google-cloud-secret-manager>=2.16.0",  # For Secret Manager access
+                    "google-cloud-logging>=3.11.0",
+                    "opentelemetry-sdk>=1.26.0",
+                    "opentelemetry-exporter-gcp-logging>=0.47b0",
+                    "opentelemetry-instrumentation-google-genai>=0.0.1",
                 ],
                 build_options={
                     "installation_scripts": ["installation_scripts/install.sh"]
