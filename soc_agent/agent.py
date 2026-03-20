@@ -1,8 +1,13 @@
 import json
 import logging
+import mimetypes
 import os
 import sys
 from pathlib import Path
+
+
+# Add text/markdown mimetype for .md files
+mimetypes.add_type("text/markdown", ".md")
 
 
 # Override location BEFORE any google imports to enable Gemini 3.x models
@@ -226,7 +231,10 @@ async def save_report_artifact(filename: str, report_content: str, ctx: Context)
     logger.info(f"SAVE_REPORT_ARTIFACT: Attempting to save {filename}")
     try:
         report_bytes = report_content.encode("utf-8")
-        report_artifact = Part.from_bytes(data=report_bytes, mime_type="text/markdown")
+        mime_type, _ = mimetypes.guess_type(filename)
+        report_artifact = Part.from_bytes(
+            data=report_bytes, mime_type=mime_type or "text/markdown"
+        )
         version = await ctx.save_artifact(filename=filename, artifact=report_artifact)
 
         # Default to ADK protocol if we can't determine the bucket
@@ -488,7 +496,7 @@ def create_agent():
     elif service_account_filename:
         # In deployed environment, service account will be available via Secret Manager
         # For local development, pass the file path
-        mcp_env["CHRONICLE_SERVICE_ACCOUNT_FILE"] = str(CHRONICLE_SERVICE_ACCOUNT_PATH)
+        mcp_env["SECOPS_SA_PATH"] = str(CHRONICLE_SERVICE_ACCOUNT_PATH)
 
     # RAG configuration
     RAG_CORPUS_ID = os.environ.get("RAG_CORPUS_ID")

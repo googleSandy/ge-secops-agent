@@ -32,6 +32,7 @@ See PR #25 discussion for additional context on this architectural decision.
 """
 
 import logging
+import mimetypes
 import os
 from pathlib import Path
 
@@ -42,6 +43,10 @@ from google.adk.tools import google_search
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from vertexai.preview import rag
+
+
+# Add text/markdown mimetype for .md files
+mimetypes.add_type("text/markdown", ".md")
 
 
 # Configure logging
