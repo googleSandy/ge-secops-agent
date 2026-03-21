@@ -247,19 +247,29 @@ async def save_report_artifact(filename: str, report_content: str, ctx: Context)
                 and ctx._invocation_context.artifact_service
             ):
                 art_svc = ctx._invocation_context.artifact_service
+
+                # Unwrap ForwardingArtifactService when called by sub-agents
+                while (
+                    hasattr(art_svc, "_invocation_context")
+                    and hasattr(art_svc._invocation_context, "artifact_service")
+                    and art_svc._invocation_context.artifact_service is not art_svc
+                ):
+                    art_svc = art_svc._invocation_context.artifact_service
+
                 if hasattr(art_svc, "bucket_name"):
                     bucket = art_svc.bucket_name
-                    app_name = getattr(
-                        ctx._invocation_context, "app_name", "unknown_app"
+                    # Always use the root context's app/user/session since that's where GcsArtifactService saves it
+                    root_ctx = (
+                        art_svc._invocation_context
+                        if hasattr(art_svc, "_invocation_context")
+                        else ctx._invocation_context
                     )
-                    user_id = getattr(
-                        ctx._invocation_context, "user_id", "unknown_user"
-                    )
+
+                    app_name = getattr(root_ctx, "app_name", "unknown_app")
+                    user_id = getattr(root_ctx, "user_id", "unknown_user")
                     session_id = "unknown_session"
-                    if hasattr(ctx._invocation_context, "session") and hasattr(
-                        ctx._invocation_context.session, "id"
-                    ):
-                        session_id = ctx._invocation_context.session.id
+                    if hasattr(root_ctx, "session") and hasattr(root_ctx.session, "id"):
+                        session_id = root_ctx.session.id
 
                     blob_name = (
                         f"{app_name}/{user_id}/{session_id}/{filename}/{version}"
