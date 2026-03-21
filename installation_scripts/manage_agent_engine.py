@@ -757,11 +757,6 @@ class AgentEngineManager:
                 "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "TRUE",
                 "OTEL_SERVICE_NAME": "adk-soc-agent",
                 "OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED": "TRUE",
-                # Observability: Enable telemetry and logging
-                # See: https://cloud.google.com/agent-builder/agent-engine/manage/tracing
-                # See: https://cloud.google.com/agent-builder/agent-engine/manage/logging
-                "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",
-                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "true",
                 # GTI Response Caching (Latency Optimization)
                 "GTI_CACHE_ENABLED": os.environ.get("GTI_CACHE_ENABLED", "True"),
                 "GTI_CACHE_FILE_TTL": os.environ.get(
