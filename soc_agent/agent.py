@@ -351,6 +351,16 @@ async def generate_memory(
         logger.warning("No context provided to generate_memory")
         return
 
+    # SHARED MEMORY SCOPE OVERRIDE
+    # Override the user_id to force a global shared memory scope across all users
+    # This ensures the Vertex AI Memory Bank is shared by the entire SOC team
+    if (
+        hasattr(ctx, "_invocation_context")
+        and hasattr(ctx._invocation_context, "session")
+        and ctx._invocation_context.session
+    ):
+        ctx._invocation_context.session.user_id = "global_soc_team"
+
     # Log usage metadata to Cloud Logging
     await log_usage_metadata(ctx)
 
@@ -366,6 +376,16 @@ async def before_tool_cache(tool, args, tool_context: Context, **kwargs):
     This prevents redundant API calls and saves execution time/tokens.
     """
     try:
+        # SHARED MEMORY SCOPE OVERRIDE
+        # Override the user_id to force a global shared memory scope for tool calls
+        # This ensures LoadMemoryTool retrieves memories from the team-wide scope
+        if (
+            hasattr(tool_context, "_invocation_context")
+            and hasattr(tool_context._invocation_context, "session")
+            and tool_context._invocation_context.session
+        ):
+            tool_context._invocation_context.session.user_id = "global_soc_team"
+
         # Create a stable cache key from tool name and sorted arguments
         cache_key = f"{tool.name}:{json.dumps(args, sort_keys=True)}"
 

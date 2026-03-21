@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help install setup clean check-prereqs check-deploy check-integration \
-	agent-engine-deploy agent-engine-deploy-and-delete agent-engine-test agent-engine-warmup \
+	agent-engine-deploy agent-engine-update agent-engine-deploy-and-delete agent-engine-test agent-engine-warmup \
 	agent-engine-list agent-engine-delete-by-index agent-engine-delete-by-resource agent-engine-redeploy \
 	agent-engine-logs \
 	agentspace-register agentspace-update agentspace-verify agentspace-delete \
@@ -140,9 +140,15 @@ clean: ## Clean up temporary files and cache
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 
 agent-engine-deploy: check-prereqs ## Deploy agent engine (use AGENT_MODULE=soc_agent_flash for Flash)
-	$(Q)$(PYTHON) $(MANAGE_AGENT_ENGINE) deploy --agent-module $(AGENT_MODULE)
+	$(Q)$(PYTHON) $(MANAGE_AGENT_ENGINE) deploy --agent-module $(AGENT_MODULE) $(if $(DESCRIPTION),--description "$(DESCRIPTION)")
 	$(Q)echo "========================================"
 	$(Q)echo "Agent deployment complete - check output above for resource details"
+	$(Q)echo "========================================"
+
+agent-engine-update: check-deploy ## Update existing agent engine in-place (preserves memory bank)
+	$(Q)$(PYTHON) $(MANAGE_AGENT_ENGINE) update --agent-module $(AGENT_MODULE) $(if $(DESCRIPTION),--description "$(DESCRIPTION)")
+	$(Q)echo "========================================"
+	$(Q)echo "Agent update complete - check output above for resource details"
 	$(Q)echo "========================================"
 
 agent-engine-deploy-pro: check-prereqs ## Deploy Pro agent (gemini-3.1-pro-preview)
@@ -152,7 +158,7 @@ agent-engine-deploy-flash: check-prereqs ## Deploy Flash agent (gemini-3-flash-p
 	$(Q)$(MAKE) agent-engine-deploy AGENT_MODULE=soc_agent_flash
 
 agent-engine-deploy-and-delete: check-prereqs ## Deploy agent engine and intelligently delete older versions
-	$(Q)$(PYTHON) $(MANAGE_AGENT_ENGINE) deploy --agent-module $(AGENT_MODULE)
+	$(Q)$(PYTHON) $(MANAGE_AGENT_ENGINE) deploy --agent-module $(AGENT_MODULE) $(if $(DESCRIPTION),--description "$(DESCRIPTION)")
 
 agent-engine-test: check-deploy ## Test the deployed agent engine
 	$(PYTHON) $(MANAGE_AGENT_ENGINE) test
@@ -497,13 +503,13 @@ agent-engine-delete-by-resource: ## Delete Agent Engine instance by resource nam
 	fi
 
 agent-engine-create: check-prereqs ## Create a new Agent Engine instance (same as deploy)
-	$(PYTHON) $(MANAGE_AGENT_ENGINE) create
+	$(PYTHON) $(MANAGE_AGENT_ENGINE) create $(if $(DESCRIPTION),--description "$(DESCRIPTION)")
 
 agent-engine-create-debug: check-prereqs ## Create Agent Engine with debug logging enabled
-	$(PYTHON) $(MANAGE_AGENT_ENGINE) create --debug
+	$(PYTHON) $(MANAGE_AGENT_ENGINE) create --debug $(if $(DESCRIPTION),--description "$(DESCRIPTION)")
 
 agent-engine-create-no-test: check-prereqs ## Create Agent Engine without running the test
-	$(PYTHON) $(MANAGE_AGENT_ENGINE) create --no-test
+	$(PYTHON) $(MANAGE_AGENT_ENGINE) create --no-test $(if $(DESCRIPTION),--description "$(DESCRIPTION)")
 
 # Workflow targets
 agent-engine-redeploy: agent-engine-deploy ## Redeploy the agent engine

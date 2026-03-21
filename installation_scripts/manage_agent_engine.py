@@ -532,6 +532,41 @@ class AgentEngineManager:
         agent_module: str = "soc_agent",
         debug: bool = False,
         no_test: bool = False,
+        description: str | None = None,
+    ) -> str | None:
+        return self._deploy_agent_internal(
+            agent_module=agent_module,
+            debug=debug,
+            no_test=no_test,
+            is_update=False,
+            description=description,
+        )
+
+    def update_agent(
+        self,
+        resource_name: str,
+        agent_module: str = "soc_agent",
+        debug: bool = False,
+        no_test: bool = False,
+        description: str | None = None,
+    ) -> str | None:
+        return self._deploy_agent_internal(
+            agent_module=agent_module,
+            debug=debug,
+            no_test=no_test,
+            is_update=True,
+            update_resource_name=resource_name,
+            description=description,
+        )
+
+    def _deploy_agent_internal(
+        self,
+        agent_module: str = "soc_agent",
+        debug: bool = False,
+        no_test: bool = False,
+        is_update: bool = False,
+        update_resource_name: str | None = None,
+        description: str | None = None,
     ) -> str | None:
         """
         Create and deploy a new Agent Engine instance.
@@ -545,7 +580,10 @@ class AgentEngineManager:
             Resource name of the created agent if successful, None otherwise
         """
         typer.echo("\n" + "=" * 80)
-        typer.secho("Creating Agent Engine Instance", fg=typer.colors.BLUE, bold=True)
+        action_text = "Updating" if is_update else "Creating"
+        typer.secho(
+            f"{action_text} Agent Engine Instance", fg=typer.colors.BLUE, bold=True
+        )
         typer.echo("=" * 80 + "\n")
 
         typer.echo(f"Agent module: {agent_module}")
@@ -822,12 +860,16 @@ class AgentEngineManager:
                     # Hide the property from the Pydantic type reflector natively using primitive bindings
                     app.__dict__[key] = "Schema Compatibility Shadow Wrapper"
 
-            # Deploy the agent engine
-            typer.echo(f"Deploying agent engine to Vertex AI as '{display_name}'...")
-            remote_app = agent_engines.create(
-                app,
-                display_name=display_name,
-                requirements=[
+            # Deploy or Update the agent engine
+            action_verb = "Updating" if is_update else "Deploying"
+            typer.echo(
+                f"{action_verb} agent engine to Vertex AI as '{display_name}'..."
+            )
+
+            deploy_kwargs = {
+                "display_name": display_name,
+                "description": description,
+                "requirements": [
                     "cloudpickle",
                     "google-adk>=1.27.0",
                     "google-cloud-aiplatform[agent-engines]~=1.140.0",
@@ -850,10 +892,10 @@ class AgentEngineManager:
                     "opentelemetry-exporter-gcp-logging>=0.47b0",
                     "opentelemetry-instrumentation-google-genai>=0.0.1",
                 ],
-                build_options={
+                "build_options": {
                     "installation_scripts": ["installation_scripts/install.sh"]
                 },
-                extra_packages=[
+                "extra_packages": [
                     "installation_scripts/install.sh",  # installs MCP server packages
                     "soc_agent",
                     "soc_agent_flash",
@@ -864,10 +906,24 @@ class AgentEngineManager:
                     "mcp-security/server/gti",
                     "mcp-security/server/scc",
                 ],
-                env_vars=env_vars,
-            )
+                "env_vars": env_vars,
+            }
 
-            typer.secho("\n Agent deployed successfully!", fg=typer.colors.GREEN)
+            if is_update:
+                if not update_resource_name:
+                    raise ValueError(
+                        "update_resource_name must be provided for updates"
+                    )
+                remote_app = agent_engines.update(
+                    resource_name=update_resource_name,
+                    agent_engine=app,
+                    **deploy_kwargs,
+                )
+            else:
+                remote_app = agent_engines.create(app, **deploy_kwargs)
+
+            success_text = "updated" if is_update else "deployed"
+            typer.secho(f"\n Agent {success_text} successfully!", fg=typer.colors.GREEN)
             typer.echo(f"Resource name: {remote_app.resource_name}")
 
             # Optionally run test
@@ -1313,13 +1369,19 @@ def create(
     no_test: Annotated[
         bool, typer.Option("--no-test", help="Skip automatic test after creation")
     ] = False,
+    description: Annotated[
+        str | None,
+        typer.Option(
+            "--description", "-d", help="Description for the deployed agent engine"
+        ),
+    ] = None,
     env_file: Annotated[
         Path, typer.Option(help="Path to the environment file.")
     ] = Path(".env"),
 ) -> None:
     """Create and deploy a new Agent Engine instance."""
     manager = AgentEngineManager(env_file)
-    resource_name = manager.create_agent(agent_module, debug, no_test)
+    resource_name = manager.create_agent(agent_module, debug, no_test, description)
 
     if resource_name:
         typer.echo("\n" + "=" * 80)
@@ -1346,6 +1408,64 @@ def create(
         except Exception as e:
             typer.secho(f"\n Failed to auto-update .env: {e}", fg=typer.colors.YELLOW)
 
+    else:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def update(
+    resource_name: Annotated[
+        str | None,
+        typer.Option(
+            "--resource",
+            "-r",
+            help="Resource name of the agent to update. If not provided, AGENT_ENGINE_RESOURCE_NAME from .env is used.",
+        ),
+    ] = None,
+    agent_module: Annotated[
+        str,
+        typer.Option(
+            "--agent-module",
+            "-a",
+            help="Agent module to deploy (e.g., 'soc_agent', 'soc_agent_flash')",
+        ),
+    ] = "soc_agent",
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Enable debug mode with verbose logging")
+    ] = False,
+    no_test: Annotated[
+        bool, typer.Option("--no-test", help="Skip automatic test after update")
+    ] = False,
+    description: Annotated[
+        str | None,
+        typer.Option(
+            "--description", "-d", help="Description for the deployed agent engine"
+        ),
+    ] = None,
+    env_file: Annotated[
+        Path, typer.Option(help="Path to the environment file.")
+    ] = Path(".env"),
+) -> None:
+    """Update an existing Agent Engine instance in-place."""
+    manager = AgentEngineManager(env_file)
+
+    if not resource_name:
+        resource_name = os.environ.get("AGENT_ENGINE_RESOURCE_NAME")
+        if not resource_name:
+            typer.secho(
+                "Error: No resource name provided and AGENT_ENGINE_RESOURCE_NAME not found in environment.",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+    updated_resource = manager.update_agent(
+        resource_name, agent_module, debug, no_test, description
+    )
+
+    if updated_resource:
+        typer.echo("\n" + "=" * 80)
+        typer.secho("UPDATE COMPLETE", fg=typer.colors.GREEN, bold=True)
+        typer.echo("=" * 80)
     else:
         raise typer.Exit(code=1)
 
