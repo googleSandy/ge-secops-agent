@@ -570,6 +570,7 @@ def create_agent():
         "GTI_CACHE_MAX_SIZE": os.environ.get("GTI_CACHE_MAX_SIZE", "1000"),
         "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "True",
         "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "True",
+        "OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT": "32768",  # Truncate large tool payloads to prevent 64KB GCP Trace limit crash
     }
 
     # Add Chronicle service account if available
