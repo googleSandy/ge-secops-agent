@@ -57,6 +57,10 @@ clarity are paramount. For this project, we explicitly value clarity over DRY.
 See PR #25 discussion for additional context on this architectural decision.
 """
 
+# -------------------------------------------------------------------------
+# Framework Monkey-Patches
+# -------------------------------------------------------------------------
+import google.adk.sessions.in_memory_session_service as im_session  # noqa: E402
 import google.cloud.logging  # noqa: E402
 import vertexai  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
@@ -65,6 +69,35 @@ from google.adk.agents.context import Context  # noqa: E402
 from google.adk.skills import load_skill_from_dir  # noqa: E402
 from google.adk.tools import skill_toolset  # noqa: E402
 from google.adk.tools.agent_tool import AgentTool  # noqa: E402
+
+
+# Silence the harmless but noisy InMemorySessionService warning inside sub-agents
+# The AgentTool spins up sub-agents with a brand new InMemorySessionService but passes
+# the parent's session object, causing a "not in sessions" warning on every single event.
+original_append_event = im_session.InMemorySessionService.append_event
+
+
+async def _patched_append_event(self, session, event):
+    app_name = session.app_name
+    user_id = session.user_id
+    session_id = session.id
+
+    # Auto-initialize the session in the in-memory dict to prevent the warning
+    with self._lock:
+        if app_name not in self.sessions:
+            self.sessions[app_name] = {}
+        if user_id not in self.sessions[app_name]:
+            self.sessions[app_name][user_id] = {}
+        if session_id not in self.sessions[app_name][user_id]:
+            self.sessions[app_name][user_id][session_id] = session
+
+    return await original_append_event(self, session, event)
+
+
+im_session.InMemorySessionService.append_event = _patched_append_event
+# -------------------------------------------------------------------------
+
+
 from google.adk.tools.load_memory_tool import LoadMemoryTool  # noqa: E402
 from google.adk.tools.mcp_tool.mcp_session_manager import (  # noqa: E402
     StdioConnectionParams,  # noqa: E402
