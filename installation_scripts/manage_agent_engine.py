@@ -794,6 +794,7 @@ class AgentEngineManager:
                 "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "TRUE",
                 "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "TRUE",
                 "OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT": "32768",  # Truncate large tool payloads to prevent 64KB GCP Trace limit crash
+                "OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT": "32768",
                 "OTEL_SERVICE_NAME": "adk-soc-agent",
                 "OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED": "TRUE",
                 # GTI Response Caching (Latency Optimization)
