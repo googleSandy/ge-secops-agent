@@ -351,21 +351,28 @@ async def generate_memory(
         logger.warning("No context provided to generate_memory")
         return
 
-    # SHARED MEMORY SCOPE OVERRIDE
-    # Override the user_id to force a global shared memory scope across all users
-    # This ensures the Vertex AI Memory Bank is shared by the entire SOC team
-    if (
-        hasattr(ctx, "_invocation_context")
-        and hasattr(ctx._invocation_context, "session")
-        and ctx._invocation_context.session
-    ):
-        ctx._invocation_context.session.user_id = "global_soc_team"
-
     # Log usage metadata to Cloud Logging
     await log_usage_metadata(ctx)
 
     try:
-        await ctx.add_session_to_memory()
+        # SHARED MEMORY SCOPE OVERRIDE
+        # We explicitly call the memory service with a global user_id
+        # instead of mutating the session, which breaks ADK's SessionService.
+        if hasattr(ctx, "_invocation_context") and getattr(
+            ctx._invocation_context, "memory_service", None
+        ):
+            session_events = (
+                ctx._invocation_context.session.events
+                if getattr(ctx._invocation_context, "session", None)
+                else []
+            )
+            await ctx._invocation_context.memory_service.add_events_to_memory(
+                app_name=ctx._invocation_context.app_name,
+                user_id="global_soc_team",
+                events=session_events,
+            )
+        else:
+            await ctx.add_session_to_memory()
     except Exception as e:
         logger.warning(f"Failed to generate memory: {e}")
 
@@ -377,14 +384,26 @@ async def before_tool_cache(tool, args, tool_context: Context, **kwargs):
     """
     try:
         # SHARED MEMORY SCOPE OVERRIDE
-        # Override the user_id to force a global shared memory scope for tool calls
-        # This ensures LoadMemoryTool retrieves memories from the team-wide scope
+        # Override the search_memory method on this specific context instance
+        # to force LoadMemoryTool to retrieve from the global team scope.
         if (
-            hasattr(tool_context, "_invocation_context")
-            and hasattr(tool_context._invocation_context, "session")
-            and tool_context._invocation_context.session
+            tool.name == "load_memory"
+            and hasattr(tool_context, "_invocation_context")
+            and getattr(tool_context._invocation_context, "memory_service", None)
         ):
-            tool_context._invocation_context.session.user_id = "global_soc_team"
+
+            async def _shared_search_memory(self, query: str):
+                return await self._invocation_context.memory_service.search_memory(
+                    app_name=self._invocation_context.app_name,
+                    user_id="global_soc_team",
+                    query=query,
+                )
+
+            import types
+
+            tool_context.search_memory = types.MethodType(
+                _shared_search_memory, tool_context
+            )
 
         # Create a stable cache key from tool name and sorted arguments
         cache_key = f"{tool.name}:{json.dumps(args, sort_keys=True)}"
