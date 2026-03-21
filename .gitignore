@@ -30,3 +30,10 @@ test_scripts/
 
 A2UI
 ai-runbooks
+
+# Ignore service account and secret JSON files
+*.json
+!*.evalset.json
+!config.json
+secops-demo-env-a0f61702b7b4.json
+CHANGELOG.txt

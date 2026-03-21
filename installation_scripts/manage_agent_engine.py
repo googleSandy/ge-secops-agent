@@ -713,10 +713,14 @@ class AgentEngineManager:
                     fg=typer.colors.YELLOW,
                 )
                 typer.echo(f"  Path: {CHRONICLE_SERVICE_ACCOUNT_PATH}")
-                dest_dir = Path("./mcp-security/server/secops/secops_mcp/")
+                # Copy to the root of the deployment directory instead of inside the module
+                dest_dir = Path(".")
                 dest_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy(CHRONICLE_SERVICE_ACCOUNT_PATH, dest_dir)
-                typer.echo("Copied service account file for Chronicle MCP server")
+                sa_filename = Path(CHRONICLE_SERVICE_ACCOUNT_PATH).name
+                typer.echo(
+                    f"Copied service account file ({sa_filename}) to project root for deployment"
+                )
                 use_secret_manager = False
             else:
                 raise ValueError(
@@ -868,6 +872,20 @@ class AgentEngineManager:
                 f"{action_verb} agent engine to Vertex AI as '{display_name}'..."
             )
 
+            extra_packages = [
+                "installation_scripts/install.sh",  # installs MCP server packages
+                "soc_agent",
+                "soc_agent_flash",
+                "soc_agent_tier1",
+                "soc_agent_cti",
+                "mcp-security/server/secops",
+                "mcp-security/server/secops-soar",
+                "mcp-security/server/gti",
+                "mcp-security/server/scc",
+            ]
+            if not use_secret_manager:
+                extra_packages.append(sa_filename)
+
             deploy_kwargs = {
                 "display_name": display_name,
                 "description": description,
@@ -897,17 +915,7 @@ class AgentEngineManager:
                 "build_options": {
                     "installation_scripts": ["installation_scripts/install.sh"]
                 },
-                "extra_packages": [
-                    "installation_scripts/install.sh",  # installs MCP server packages
-                    "soc_agent",
-                    "soc_agent_flash",
-                    "soc_agent_tier1",
-                    "soc_agent_cti",
-                    "mcp-security/server/secops",
-                    "mcp-security/server/secops-soar",
-                    "mcp-security/server/gti",
-                    "mcp-security/server/scc",
-                ],
+                "extra_packages": extra_packages,
                 "env_vars": env_vars,
             }
 
@@ -983,13 +991,14 @@ class AgentEngineManager:
             log_file.write(f"Created session: {session_id}\n")
 
             test_messages = (
-                "Get the 2 documents on Malware and then fetch_full_document for both",
-                "List rules with ursnif in the name.",  # Chronicle SIEM MCP
-                "List the first page of soar cases.",  # SOAR MCP
+                "Use the get_ioc_matches tool for domain superstarts.top",
+                # "Get the 2 documents on Malware and then fetch_full_document for both",
+                # "List rules with ursnif in the name.",  # Chronicle SIEM MCP
+                # "List the first page of soar cases.",  # SOAR MCP
                 # memory save test
-                "For our future investigations, please note that we have a critical asset: MALWARETEST-WIN at IP 50.90.32.142. Please acknowledge this so we have it for future reference.",
+                # "For our future investigations, please note that we have a critical asset: MALWARETEST-WIN at IP 50.90.32.142. Please acknowledge this so we have it for future reference.",
                 # soar case search test
-                "Can you check our SOAR case management system to see if we have any currently open security cases that might relate to APT29?",
+                # "Can you check our SOAR case management system to see if we have any currently open security cases that might relate to APT29?",
             )
 
             for test_message in test_messages:
@@ -1001,6 +1010,7 @@ class AgentEngineManager:
                     user_id=user_id, session_id=session_id, message=test_message
                 ):
                     log_file.write(f"Event: {event}\n")
+                    print(f"Event: {event}\n")
                     events.append(event)
                     # Optional: Print a dot to show progress instead of full event
                     print(".", end="", flush=True)

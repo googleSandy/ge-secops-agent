@@ -502,7 +502,9 @@ def create_agent():
     load_dotenv(Path(".env"), override=True)
 
     # Get all required environment variables
+    logger.warning("AUTH_DEBUG [soc_agent]: Starting create_agent() execution")
     GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
+    logger.warning(f"AUTH_DEBUG [soc_agent]: GCP_PROJECT_ID={GCP_PROJECT_ID}")
     GCP_LOCATION = os.environ.get("GCP_LOCATION", "us-central1")
     GCP_STAGING_BUCKET = os.environ.get("GCP_STAGING_BUCKET")
     GCP_VERTEXAI_ENABLED = os.environ.get("GCP_VERTEXAI_ENABLED", "True")
@@ -514,6 +516,19 @@ def create_agent():
     CHRONICLE_SERVICE_ACCOUNT_PATH = os.environ.get("CHRONICLE_SERVICE_ACCOUNT_PATH")
     CHRONICLE_SERVICE_ACCOUNT_SECRET = os.environ.get(
         "CHRONICLE_SERVICE_ACCOUNT_SECRET"
+    )
+    logger.warning(
+        f"AUTH_DEBUG [soc_agent]: CHRONICLE_CUSTOMER_ID={CHRONICLE_CUSTOMER_ID}"
+    )
+    logger.warning(
+        f"AUTH_DEBUG [soc_agent]: CHRONICLE_PROJECT_ID={CHRONICLE_PROJECT_ID}"
+    )
+    logger.warning(f"AUTH_DEBUG [soc_agent]: CHRONICLE_REGION={CHRONICLE_REGION}")
+    logger.warning(
+        f"AUTH_DEBUG [soc_agent]: CHRONICLE_SERVICE_ACCOUNT_PATH={CHRONICLE_SERVICE_ACCOUNT_PATH}"
+    )
+    logger.warning(
+        f"AUTH_DEBUG [soc_agent]: CHRONICLE_SERVICE_ACCOUNT_SECRET={CHRONICLE_SERVICE_ACCOUNT_SECRET[:50] if CHRONICLE_SERVICE_ACCOUNT_SECRET else None}"
     )
 
     # Validate required Chronicle environment variables
@@ -575,11 +590,18 @@ def create_agent():
 
     # Add Chronicle service account if available
     if CHRONICLE_SERVICE_ACCOUNT_SECRET:
+        logger.warning(
+            "AUTH_DEBUG [soc_agent]: Adding CHRONICLE_SERVICE_ACCOUNT_SECRET to mcp_env"
+        )
         mcp_env["CHRONICLE_SERVICE_ACCOUNT_SECRET"] = CHRONICLE_SERVICE_ACCOUNT_SECRET
     elif service_account_filename:
-        # In deployed environment, service account will be available via Secret Manager
-        # For local development, pass the file path
-        mcp_env["SECOPS_SA_PATH"] = str(CHRONICLE_SERVICE_ACCOUNT_PATH)
+        logger.warning("AUTH_DEBUG [soc_agent]: Adding SECOPS_SA_PATH to mcp_env")
+        # Ensure we use the filename (not absolute path) so it works in the container where the file is copied
+        mcp_env["SECOPS_SA_PATH"] = service_account_filename
+    else:
+        logger.warning(
+            "AUTH_DEBUG [soc_agent]: NEITHER SECRET NOR PATH WAS ADDED TO mcp_env!"
+        )
 
     # RAG configuration
     RAG_CORPUS_ID = os.environ.get("RAG_CORPUS_ID")
