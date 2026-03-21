@@ -83,13 +83,12 @@ async def _patched_append_event(self, session, event):
     session_id = session.id
 
     # Auto-initialize the session in the in-memory dict to prevent the warning
-    with self._lock:
-        if app_name not in self.sessions:
-            self.sessions[app_name] = {}
-        if user_id not in self.sessions[app_name]:
-            self.sessions[app_name][user_id] = {}
-        if session_id not in self.sessions[app_name][user_id]:
-            self.sessions[app_name][user_id][session_id] = session
+    if app_name not in self.sessions:
+        self.sessions[app_name] = {}
+    if user_id not in self.sessions[app_name]:
+        self.sessions[app_name][user_id] = {}
+    if session_id not in self.sessions[app_name][user_id]:
+        self.sessions[app_name][user_id][session_id] = session
 
     return await original_append_event(self, session, event)
 
