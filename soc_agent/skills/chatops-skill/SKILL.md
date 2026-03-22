@@ -1,6 +1,8 @@
 ---
 name: chatops-skill
 description: Enables the agent to communicate with human security analysts for notifications and high-stakes confirmations (Human-in-the-loop).
+references:
+ - https://developers.google.com/workspace/chat/design-interactive-card-dialog
 ---
 
 ### ChatOps and Human Interaction Implementation
@@ -19,39 +21,47 @@ You are equipped with the capability to send rich notifications and action reque
 - **send_chatops_card:** Send any custom card with title, subtitle, and sections.
 
 ### Example Card Layout Patterns
-When using `send_chatops_card`, you can use these patterns for the `sections` argument:
+When using `send_chatops_card`, follow these modernized patterns for the `sections` argument to ensure a premium analyst experience:
 
-**1. IOC Enrichment Layout (decoratedText)**
+**1. IOC Enrichment Layout (Columns + materialIcon)**
 ```json
 [
   { "widgets": [
-    { "decoratedText": { "topLabel": "Vendor A", "text": "Tagged: Fancy Bear / APT28", "startIcon": { "knownIcon": "DESCRIPTION" } } },
-    { "decoratedText": { "topLabel": "Vendor B", "text": "45/70 Malicious detections", "startIcon": { "knownIcon": "BUG_REPORT" } } },
-    { "buttonList": { "buttons": [{ "text": "View Full Report", "onClick": { "openLink": { "url": "https://..." } } }] } }
+    { "columns": { "columnItems": [
+      { "widgets": [ { "decoratedText": { "topLabel": "CrowdStrike", "text": "APT28 / Fancy Bear", "startIcon": { "materialIcon": { "name": "flag" } } } } ] },
+      { "widgets": [ { "decoratedText": { "topLabel": "VirusTotal", "text": "45/70 Detections", "startIcon": { "materialIcon": { "name": "security" } } } } ] }
+    ] } },
+    { "buttonList": { "buttons": [{ "text": "Investigate History", "color": { "red": 0.1, "green": 0.5, "blue": 1.0 }, "onClick": { "openLink": { "url": "https://..." } } }] } }
   ]}
 ]
 ```
 
-**2. Runtime / Threat Detection Layout (textParagraph + buttons)**
+**2. Runtime / Threat Detection Layout (Grouped Metrics)**
 ```json
 [
   { "widgets": [
-    { "textParagraph": { "text": "Pod <b>auth-api-88x</b> is consuming 100% CPU on Cryptominer signatures. Should I kill and redeploy?" } },
+    { "columns": { "columnItems": [
+      { "widgets": [ { "decoratedText": { "topLabel": "Target Pod", "text": "auth-api-88x", "startIcon": { "materialIcon": { "name": "layers" } } } } ] },
+      { "widgets": [ { "decoratedText": { "topLabel": "CPU Usage", "text": "100%", "startIcon": { "materialIcon": { "name": "speed" } } } } ] }
+    ] } },
+    { "textParagraph": { "text": "Cryptominer signatures identified. Action required to contain threat." } },
     { "buttonList": { "buttons": [
-      { "text": "Kill & Redeploy", "onClick": { "openLink": { "url": "https://..." } } },
+      { "text": "Kill & Redeploy", "color": { "red": 0.8, "green": 0, "blue": 0 }, "onClick": { "openLink": { "url": "https://..." } } },
       { "text": "Debug Console", "onClick": { "openLink": { "url": "https://..." } } }
     ]} }
   ]}
 ]
 ```
 
-**3. User/Entity Context (impossible travel)**
+**3. User/Entity Context (Location side-by-side)**
 ```json
 [
   { "widgets": [
-    { "decoratedText": { "topLabel": "Current Login", "text": "London, UK (IP: 85.112.x.x)", "startIcon": { "knownIcon": "FLIGHT_TAKEOFF" } } },
-    { "decoratedText": { "topLabel": "Previous Login", "text": "New York, US (IP: 12.34.x.x)", "startIcon": { "knownIcon": "FLIGHT_LAND" } } },
-    { "buttonList": { "buttons": [ { "text": "Confirm Identity", "onClick": { "openLink": { "url": "https://..." } } } ] } }
+    { "columns": { "columnItems": [
+      { "widgets": [ { "decoratedText": { "topLabel": "Current Login", "text": "London, UK", "startIcon": { "materialIcon": { "name": "place" } } } } ] },
+      { "widgets": [ { "decoratedText": { "topLabel": "Previous Login", "text": "New York, US", "startIcon": { "materialIcon": { "name": "place" } } } } ] }
+    ] } },
+    { "buttonList": { "buttons": [ { "text": "Require MFA", "color": { "red": 0, "green": 0.5, "blue": 1.0 }, "onClick": { "openLink": { "url": "https://..." } } } ] } }
   ]}
 ]
 ```
