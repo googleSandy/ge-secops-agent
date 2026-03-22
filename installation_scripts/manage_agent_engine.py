@@ -752,6 +752,14 @@ class AgentEngineManager:
             typer.echo("Creating agent...")
             agent = create_agent_func()
 
+            # Extract memory bank configuration if present
+            memory_bank_config = getattr(agent_pkg, "memory_bank_config", None)
+            if memory_bank_config:
+                typer.secho(
+                    "Found Memory Bank configuration in agent module",
+                    fg=typer.colors.CYAN,
+                )
+
             # Create the ADK app
             from google.adk.artifacts.gcs_artifact_service import GcsArtifactService
 
@@ -918,6 +926,23 @@ class AgentEngineManager:
                 "extra_packages": extra_packages,
                 "env_vars": env_vars,
             }
+
+            # Add Memory Bank configuration to context_spec if present
+            if memory_bank_config:
+                typer.secho(
+                    "Configuring Agent Engine with Memory Bank custom topics...",
+                    fg=typer.colors.CYAN,
+                )
+                deploy_kwargs["context_spec"] = {
+                    "memory_bank_config": memory_bank_config
+                }
+                logging.info(
+                    f"DEPLOYMENT: Injected context_spec into deployment configuration: {json.dumps(deploy_kwargs['context_spec'])}"
+                )
+            else:
+                logging.info(
+                    "DEPLOYMENT: No memory_bank_config found to inject into context_spec."
+                )
 
             if is_update:
                 if not update_resource_name:
