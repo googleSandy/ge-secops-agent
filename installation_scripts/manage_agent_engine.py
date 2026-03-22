@@ -927,22 +927,14 @@ class AgentEngineManager:
                 "env_vars": env_vars,
             }
 
-            # Add Memory Bank configuration to context_spec if present
+            # Add Memory Bank configuration logging
             if memory_bank_config:
                 typer.secho(
-                    "Configuring Agent Engine with Memory Bank custom topics...",
+                    "Memory Bank custom topics found in agent module.",
                     fg=typer.colors.CYAN,
                 )
-                deploy_kwargs["context_spec"] = {
-                    "memory_bank_config": memory_bank_config
-                }
-                logging.info(
-                    f"DEPLOYMENT: Injected context_spec into deployment configuration: {json.dumps(deploy_kwargs['context_spec'])}"
-                )
             else:
-                logging.info(
-                    "DEPLOYMENT: No memory_bank_config found to inject into context_spec."
-                )
+                logging.info("DEPLOYMENT: No memory_bank_config found.")
 
             if is_update:
                 if not update_resource_name:
@@ -956,6 +948,28 @@ class AgentEngineManager:
                 )
             else:
                 remote_app = agent_engines.create(app, **deploy_kwargs)
+
+            # If memory bank config is present, we must apply it via a separate update
+            # because the high-level create/update APIs don't currently support context_spec
+            if memory_bank_config:
+                try:
+                    typer.echo("Applying Memory Bank custom topics configuration...")
+                    client = vertexai.Client()
+                    client.agent_engines.update(
+                        name=remote_app.resource_name,
+                        config={
+                            "context_spec": {"memory_bank_config": memory_bank_config}
+                        },
+                    )
+                    typer.secho(
+                        "Memory Bank configuration applied successfully!",
+                        fg=typer.colors.GREEN,
+                    )
+                except Exception as e:
+                    typer.secho(
+                        f"Warning: Failed to apply Memory Bank configuration: {e}",
+                        fg=typer.colors.YELLOW,
+                    )
 
             success_text = "updated" if is_update else "deployed"
             typer.secho(f"\n Agent {success_text} successfully!", fg=typer.colors.GREEN)
