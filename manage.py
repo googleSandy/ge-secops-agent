@@ -22,6 +22,7 @@ from installation_scripts.manage_agent_engine import app as agent_engine_app
 from installation_scripts.manage_agentspace import app as agentspace_app
 from installation_scripts.manage_datastore import app as datastore_app
 from installation_scripts.manage_iam import app as iam_app
+from installation_scripts.manage_memories import app as memories_app
 from installation_scripts.manage_oauth import app as oauth_app
 from installation_scripts.manage_rag import app as rag_app
 from installation_scripts.manage_vertex_ai import app as vertex_app
@@ -48,6 +49,7 @@ app.add_typer(
 app.add_typer(oauth_app, name="oauth", help="Manage OAuth authorizations")
 app.add_typer(datastore_app, name="datastore", help="Manage data stores")
 app.add_typer(rag_app, name="rag", help="Manage RAG corpora")
+app.add_typer(memories_app, name="memories", help="Manage Agent Engine memories")
 app.add_typer(iam_app, name="iam", help="Manage IAM permissions for service accounts")
 app.add_typer(vertex_app, name="vertex", help="Verify and manage Vertex AI setup")
 

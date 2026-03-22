@@ -408,15 +408,38 @@ async def generate_memory(
                 if getattr(ctx._invocation_context, "session", None)
                 else []
             )
+
+            logger.info(
+                "MEMORY_GENERATION: Triggering Vertex AI Memory Bank generation."
+            )
+            logger.info(
+                f"MEMORY_GENERATION_TOPICS: Passing {len(memory_bank_config.get('customization_configs', [{}])[0].get('memory_topics', []))} custom memory topics."
+            )
+            logger.debug(f"MEMORY_GENERATION_CONFIG: {json.dumps(memory_bank_config)}")
+
             await ctx._invocation_context.memory_service.add_events_to_memory(
                 app_name=ctx._invocation_context.app_name,
                 user_id="global_soc_team",
                 events=session_events,
+                custom_metadata=memory_bank_config,
+            )
+            logger.info(
+                "MEMORY_GENERATION: Successfully submitted events to Vertex AI memory service."
             )
         else:
-            await ctx.add_session_to_memory()
+            if hasattr(ctx, "add_session_to_memory"):
+                logger.info(
+                    "MEMORY_GENERATION: Triggering session memory via ctx.add_session_to_memory (Default ADK)."
+                )
+                await ctx.add_session_to_memory()
+            else:
+                logger.warning(
+                    "MEMORY_GENERATION_SKIP: No memory service or add_session_to_memory method available on context."
+                )
     except Exception as e:
-        logger.warning(f"Failed to generate memory: {e}")
+        logger.error(
+            f"MEMORY_GENERATION_ERROR: Failed to generate memory: {e}", exc_info=True
+        )
 
 
 async def before_tool_cache(tool, args, tool_context: Context, **kwargs):
