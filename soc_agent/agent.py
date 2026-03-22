@@ -996,6 +996,7 @@ DELEGATION STRATEGY:
 2. For runbook/procedure queries: Use `retrieve_agentic_soc_runbooks` directly.
 3. For threat intelligence: Delegate to `cti_researcher`.
 4. For alert triage/investigation: Delegate to `tier1_analyst`.
+5. For querying historical memory or recording analyst notes: Delegate to `tier1_analyst`.
 """
 
     if A2UI_ENABLED:
