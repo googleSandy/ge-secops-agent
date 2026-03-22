@@ -112,6 +112,11 @@ from google.genai.types import (  # noqa: E402
 from mcp import StdioServerParameters  # noqa: E402
 
 from soc_agent.tools.a2ui_renderer import render_dashboard  # noqa: E402
+from soc_agent.tools.chatops_tools import (  # noqa: E402
+    notify_human_incident,
+    request_human_confirmation,
+    send_chatops_card,
+)
 
 
 # Monkey-patch version property to prevent Vertex AI Agent Engine serialization errors
@@ -688,9 +693,12 @@ def create_agent():
     skill_dir = Path(__file__).parent / "skills"
     ioc_enrichment_skill = load_skill_from_dir(skill_dir / "ioc-enrichment-skill")
     malware_triage_skill = load_skill_from_dir(skill_dir / "malware-triage-skill")
+    chatops_skill = load_skill_from_dir(skill_dir / "chatops-skill")
 
     cti_skill_toolset = skill_toolset.SkillToolset(skills=[ioc_enrichment_skill])
-    tier1_skill_toolset = skill_toolset.SkillToolset(skills=[malware_triage_skill])
+    tier1_skill_toolset = skill_toolset.SkillToolset(
+        skills=[malware_triage_skill, chatops_skill]
+    )
 
     cti_tools = [save_report_artifact, cti_skill_toolset, LoadMemoryTool()]
 
@@ -816,7 +824,14 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
     # ========================================================================
     logger.info("Creating Tier 1 sub-agent...")
 
-    tier1_tools = [save_report_artifact, tier1_skill_toolset, LoadMemoryTool()]
+    tier1_tools = [
+        save_report_artifact,
+        tier1_skill_toolset,
+        LoadMemoryTool(),
+        notify_human_incident,
+        request_human_confirmation,
+        send_chatops_card,
+    ]
 
     # Chronicle for basic entity lookups
     tier1_tools.append(
@@ -934,7 +949,13 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
     logger.info("Creating main orchestrator agent...")
 
     # Build orchestrator tools list
-    orchestrator_tools = [fetch_full_document, save_report_artifact]
+    orchestrator_tools = [
+        fetch_full_document,
+        save_report_artifact,
+        notify_human_incident,
+        request_human_confirmation,
+        send_chatops_card,
+    ]
 
     if A2UI_ENABLED:
         orchestrator_tools.append(render_dashboard)
@@ -982,6 +1003,12 @@ You have direct access to several tools and can delegate to specialized sub-agen
     orchestrator_instruction += """
 4. **LoadMemoryTool** (Vertex AI Memory Bank):
    - Retrieves historical context and tactical insights persisted from previous investigations.
+
+5. **ChatOps Tools** (Human Communication):
+   - **notify_human_incident**: Send a high-priority incident alert to the human analyst team.
+   - **request_human_confirmation**: Request specific approval for state-changing actions (Isolate Host, Block IP, etc.).
+   - **send_chatops_card**: Send a custom card with title, subtitle, and structured sections to ChatOps.
+   - **CRITICAL:** Use these whenever human intervention or notification is required.
 
 ### SPECIALIZED SUB-AGENTS (You delegate to these):
 
