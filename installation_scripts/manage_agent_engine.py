@@ -756,8 +756,13 @@ class AgentEngineManager:
             memory_bank_config = getattr(agent_pkg, "memory_bank_config", None)
             if memory_bank_config:
                 typer.secho(
-                    "Found Memory Bank configuration in agent module",
+                    f"Found Memory Bank configuration with {len(memory_bank_config.get('customization_configs', [{}])[0].get('memory_topics', []))} topics",
                     fg=typer.colors.CYAN,
+                )
+            else:
+                typer.secho(
+                    "No Memory Bank configuration found in agent module.",
+                    fg=typer.colors.YELLOW,
                 )
 
             # Create the ADK app
@@ -954,13 +959,41 @@ class AgentEngineManager:
             if memory_bank_config:
                 try:
                     typer.echo("Applying Memory Bank custom topics configuration...")
-                    client = vertexai.Client()
+                    client = vertexai.Client(
+                        project=self.project, location=self.location
+                    )
+
+                    # Debug: Check if already present
+                    existing_agent = client.agent_engines.get(
+                        name=remote_app.resource_name
+                    )
+                    if existing_agent.api_resource.context_spec:
+                        typer.echo("Existing context_spec found. Updating...")
+                    else:
+                        typer.echo("No existing context_spec found. Creating...")
+
                     client.agent_engines.update(
                         name=remote_app.resource_name,
                         config={
                             "context_spec": {"memory_bank_config": memory_bank_config}
                         },
                     )
+
+                    # Verify after update
+                    updated_agent = client.agent_engines.get(
+                        name=remote_app.resource_name
+                    )
+                    if updated_agent.api_resource.context_spec:
+                        typer.secho(
+                            "Memory Bank configuration verified on backend!",
+                            fg=typer.colors.GREEN,
+                        )
+                    else:
+                        typer.secho(
+                            "Warning: Memory Bank configuration NOT found on backend after update.",
+                            fg=typer.colors.YELLOW,
+                        )
+
                     typer.secho(
                         "Memory Bank configuration applied successfully!",
                         fg=typer.colors.GREEN,
@@ -969,6 +1002,10 @@ class AgentEngineManager:
                     typer.secho(
                         f"Warning: Failed to apply Memory Bank configuration: {e}",
                         fg=typer.colors.YELLOW,
+                    )
+                    logging.error(
+                        f"DEPLOYMENT_ERROR: Failed to update context_spec: {e}",
+                        exc_info=True,
                     )
 
             success_text = "updated" if is_update else "deployed"

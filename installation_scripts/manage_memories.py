@@ -4,6 +4,15 @@ Memory Bank Manager for Google Vertex AI Agent Engine
 
 This script manages Agent Engine memories including listing, retrieving,
 and getting specific memories in Vertex AI.
+
+References
+
+ 1. https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/overview
+ 2. https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/quickstart-api
+ 3. https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/quickstart-adk
+ 4. https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/fetch-memories
+ 5. https://docs.cloud.google.com/agent-builder/agent-engine/memory-bank/generate-memories#memory-topics
+
 """
 
 import os
