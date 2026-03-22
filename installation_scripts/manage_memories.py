@@ -480,6 +480,95 @@ class MemoryManager:
 
                 typer.echo(traceback.format_exc())
 
+    def create(
+        self,
+        engine: str,
+        fact: str,
+        user_id: str,
+        app_name: str,
+        topic: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Create a new memory manually."""
+        engine_name = self._get_agent_engine_id(engine)
+
+        # Extract location from the resource name to initialize client properly
+        parts = engine_name.split("/")
+        location = "us-central1"
+        if len(parts) >= 4 and parts[2] == "locations":
+            location = parts[3]
+
+        # Temporarily strip API key to force OAuth credentials
+        api_key = os.environ.pop("GEMINI_API_KEY", None)
+
+        # We must explicitly set the API endpoint to match the location
+        # or it will default to us-central1 and fail for multi-region engines
+        api_endpoint = f"{location}-aiplatform.googleapis.com"
+
+        vertexai.init(
+            project=self.project,
+            location=location,
+            staging_bucket=self.staging_bucket,
+            api_endpoint=api_endpoint,
+        )
+        client = vertexai.Client(project=self.project, location=location)
+        if api_key:
+            os.environ["GEMINI_API_KEY"] = api_key
+
+        scope = {
+            "user_id": user_id,
+            "app_name": app_name,
+        }
+
+        # Build config with topics and metadata
+        config = {}
+        if topic:
+            # Check if it's a known managed topic or treat as custom label
+            managed_topics = [
+                "USER_PERSONAL_INFO",
+                "USER_PREFERENCES",
+                "KEY_CONVERSATION_DETAILS",
+                "EXPLICIT_INSTRUCTIONS",
+            ]
+            if topic.upper() in managed_topics:
+                config["topics"] = [{"managed_topic_enum": topic.upper()}]
+            else:
+                config["topics"] = [{"custom_memory_topic_label": topic}]
+
+        if metadata:
+            config["metadata"] = metadata
+
+        try:
+            typer.secho(
+                f"Creating memory for scope {scope} in engine {engine_name}...",
+                fg=typer.colors.BLUE,
+            )
+            operation = client.agent_engines.memories.create(
+                name=engine_name, fact=fact, scope=scope, config=config
+            )
+
+            # Wait for completion
+            if hasattr(operation, "result"):
+                memory = operation.result()
+            else:
+                memory = operation
+
+            typer.secho("Memory created successfully!", fg=typer.colors.GREEN)
+
+            # The returned object might be an operation or a memory depending on SDK version
+            # Let's handle both gracefully for printing
+            if hasattr(memory, "name"):
+                typer.echo(f"ID: {memory.name}")
+            if hasattr(memory, "fact"):
+                typer.echo(f"Fact: {memory.fact}")
+
+        except Exception as e:
+            typer.secho(f"Error creating memory: {e}", fg=typer.colors.RED)
+            if DEBUG:
+                import traceback
+
+                typer.echo(traceback.format_exc())
+
 
 @app.command()
 def retrieve(
@@ -578,6 +667,54 @@ def get(
     """Get a specific memory by its ID (full resource name)."""
     manager = MemoryManager(env_file)
     manager.get(memory_id)
+
+
+@app.command()
+def create(
+    fact: Annotated[str, typer.Option("--content", "-c", help="The fact to remember.")],
+    topic: Annotated[
+        str | None,
+        typer.Option("--topic", "-t", help="The topic label for this memory."),
+    ] = None,
+    engine: Annotated[
+        str | None,
+        typer.Option(
+            "--engine",
+            "-e",
+            help="Agent Engine ID or resource name. Defaults to AGENT_ENGINE_RESOURCE_NAME in .env",
+        ),
+    ] = None,
+    user_id: Annotated[
+        str,
+        typer.Option(
+            "--user", "-u", help="User ID scope to create for (e.g., 'global_soc_team')"
+        ),
+    ] = "global_soc_team",
+    app_name: Annotated[
+        str | None,
+        typer.Option(
+            "--app",
+            "-a",
+            help="App name scope. Defaults to AGENTSPACE_APP_ID in .env or 'secops_agent'",
+        ),
+    ] = None,
+    env_file: Annotated[
+        Path, typer.Option(help="Path to the environment file.")
+    ] = Path(".env"),
+) -> None:
+    """Create a new memory manually with a specific topic."""
+    manager = MemoryManager(env_file)
+
+    if not app_name:
+        app_name = manager.env_vars.get("AGENTSPACE_APP_ID", "secops_agent")
+
+    manager.create(
+        engine=engine,
+        fact=fact,
+        user_id=user_id,
+        app_name=app_name,
+        topic=topic,
+    )
 
 
 if __name__ == "__main__":
