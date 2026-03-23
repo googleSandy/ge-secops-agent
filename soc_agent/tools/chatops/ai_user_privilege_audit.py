@@ -2,9 +2,13 @@
 ChatOps Card: ai_user_privilege_audit
 Generated from ai_user_privilege_audit.sh
 """
-from card_client import send_card
+from card_client import send_card, generate_action_url
 
-def get_card():
+
+def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str = None):
+    # Dynamic URLs
+    approve_url = generate_action_url("Approve", session_id, agent_engine_id, user_id=user_id)
+    deny_url = generate_action_url("Deny", session_id, agent_engine_id, user_id=user_id)
     return {
   "cardsV2": [
     {
@@ -27,22 +31,8 @@ def get_card():
               {
                 "buttonList": {
                   "buttons": [
-                    {
-                      "text": "Strip Extra Privs",
-                      "onClick": {
-                        "openLink": {
-                          "url": "https://example.com/strip"
-                        }
-                      }
-                    },
-                    {
-                      "text": "Keep Access",
-                      "onClick": {
-                        "openLink": {
-                          "url": "https://example.com/keep"
-                        }
-                      }
-                    }
+                    { "text": "Strip Extra Privs", "onClick": { "openLink": { "url": approve_url } } },
+                    { "text": "Keep Access", "onClick": { "openLink": { "url": deny_url } } }
                   ]
                 }
               }
@@ -55,5 +45,5 @@ def get_card():
 }
 
 if __name__ == "__main__":
-    card = get_card()
+    card = get_card(session_id="test-session", agent_engine_id="test-agent", user_id="test-user")
     send_card(card)

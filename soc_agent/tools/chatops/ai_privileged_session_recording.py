@@ -2,9 +2,13 @@
 ChatOps Card: ai_privileged_session_recording
 Generated from ai_privileged_session_recording.sh
 """
-from card_client import send_card
+from card_client import send_card, generate_action_url
 
-def get_card():
+
+def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str = None):
+    # Dynamic URLs
+    approve_url = generate_action_url("Approve", session_id, agent_engine_id, user_id=user_id)
+    deny_url = generate_action_url("Deny", session_id, agent_engine_id, user_id=user_id)
     return {
   "cardsV2": [
     {
@@ -27,22 +31,8 @@ def get_card():
               {
                 "buttonList": {
                   "buttons": [
-                    {
-                      "text": "Start Recording",
-                      "onClick": {
-                        "openLink": {
-                          "url": "https://example.com/rec"
-                        }
-                      }
-                    },
-                    {
-                      "text": "Analyst Monitor",
-                      "onClick": {
-                        "openLink": {
-                          "url": "https://example.com/view"
-                        }
-                      }
-                    }
+                    { "text": "Start Recording", "onClick": { "openLink": { "url": approve_url } } },
+                    { "text": "Analyst Monitor", "onClick": { "openLink": { "url": deny_url } } }
                   ]
                 }
               }
@@ -55,5 +45,5 @@ def get_card():
 }
 
 if __name__ == "__main__":
-    card = get_card()
+    card = get_card(session_id="test-session", agent_engine_id="test-agent", user_id="test-user")
     send_card(card)

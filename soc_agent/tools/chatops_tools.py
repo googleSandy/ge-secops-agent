@@ -2,6 +2,8 @@ import logging
 import os
 
 import httpx
+from google.adk.agents.context import Context
+from soc_agent.tools.chatops.card_client import generate_action_url
 
 
 logger = logging.getLogger(__name__)
@@ -65,19 +67,42 @@ async def request_human_confirmation(
     action_name: str,
     description: str,
     context_data: str,
-    approval_url: str = "https://example.com/approve",
-    deny_url: str = "https://example.com/deny",
+    ctx: Context = None,
+    approval_url: str = None,
+    deny_url: str = None,
 ) -> str:
     """
     Sends a request for human-in-the-loop confirmation via ChatOps.
+    If 'ctx' is available, it will generate secure signed URLs for the action.
 
     Args:
         action_name: The name of the action requiring confirmation (e.g. 'Block IP', 'Isolate Host').
         description: Why this action is being proposed.
         context_data: Relevant data snippets (e.g. IP address, hostname, alert ID).
-        approval_url: URL the human should click to approve (optional).
-        deny_url: URL the human should click to deny (optional).
+        ctx: ADK Context (automatically injected).
+        approval_url: Override URL to approve (optional).
+        deny_url: Override URL to deny (optional).
     """
+    # Auto-resolve session and agent IDs from context if available
+    session_id = None
+    agent_engine_id = os.environ.get("AGENT_ENGINE_RESOURCE_NAME")
+    
+    user_id = None # Initialize user_id
+
+    if ctx:
+        if hasattr(ctx, "session") and hasattr(ctx.session, "id"):
+            session_id = ctx.session.id
+        elif hasattr(ctx, "_invocation_context") and hasattr(ctx._invocation_context, "session"):
+               session_id = ctx._invocation_context.session.id
+        if hasattr(ctx, "user_id"): # Check for user_id on ctx
+            user_id = ctx.user_id
+
+    # Generate signed URLs if not explicitly provided
+    if not approval_url:
+        approval_url = generate_action_url(f"Approve {action_name}", session_id, agent_engine_id, user_id=user_id)
+    if not deny_url:
+        deny_url = generate_action_url(f"Deny {action_name}", session_id, agent_engine_id, user_id=user_id)
+
     sections = [
         {
             "header": "Action Required",

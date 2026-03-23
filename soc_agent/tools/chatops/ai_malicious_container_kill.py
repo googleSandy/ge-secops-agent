@@ -2,9 +2,13 @@
 ChatOps Card: ai_malicious_container_kill
 Modernized Version
 """
-from card_client import send_card
+from card_client import send_card, generate_action_url
 
-def get_card():
+
+def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str = None):
+    # Dynamic URLs
+    approve_url = generate_action_url("Approve", session_id, agent_engine_id, user_id=user_id)
+    deny_url = generate_action_url("Deny", session_id, agent_engine_id, user_id=user_id)
     return {
   "cardsV2": [
     {
@@ -59,15 +63,8 @@ def get_card():
               {
                 "buttonList": {
                   "buttons": [
-                    {
-                      "text": "Kill & Redeploy",
-                      "color": { "red": 0.8, "green": 0, "blue": 0 },
-                      "onClick": { "openLink": { "url": "https://example.com/redeploy" } }
-                    },
-                    {
-                      "text": "Debug Console",
-                      "onClick": { "openLink": { "url": "https://example.com/debug" } }
-                    }
+                    { "text": "Kill & Redeploy", "onClick": { "openLink": { "url": approve_url } } },
+                    { "text": "Debug Console", "onClick": { "openLink": { "url": deny_url } } }
                   ]
                 }
               }
