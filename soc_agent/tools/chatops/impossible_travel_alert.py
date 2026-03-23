@@ -1,10 +1,13 @@
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+from card_client import send_card, generate_action_url
 """
 ChatOps Card: impossible_travel_alert
 Modernized Version
 """
-from card_client import send_card
 
-def get_card():
+def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str = None):
     return {
     "cardsV2": [
       {
@@ -90,12 +93,12 @@ def get_card():
                       {
                         "text": "Require MFA",
                         "color": { "red": 0, "green": 0.5, "blue": 1 },
-                        "onClick": { "openLink": { "url": "https://example.com/mfa" } }
+                        "onClick": { "openLink": { "url": generate_action_url("Mfa", session_id=session_id, agent_engine_id=agent_engine_id, user_id=user_id) } }
                       },
                       {
                         "text": "Reset Password",
                         "color": { "red": 0.8, "green": 0, "blue": 0 },
-                        "onClick": { "openLink": { "url": "https://example.com/reset" } }
+                        "onClick": { "openLink": { "url": generate_action_url("Reset", session_id=session_id, agent_engine_id=agent_engine_id, user_id=user_id) } }
                       }
                     ]
                   }
@@ -108,5 +111,19 @@ def get_card():
     ]
   }
 
+
+
 if __name__ == "__main__":
-    send_card(get_card())
+    # Load environment for manual testing
+    load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
+    
+    session_id = os.getenv("CHATOPS_TEST_SESSION_ID", "test-session")
+    agent_id = os.getenv("AGENT_ENGINE_RESOURCE_NAME", "test-agent")
+    
+    # Send the card
+    card = get_card(
+        session_id=session_id, 
+        agent_engine_id=agent_id, 
+        user_id="vais-query-reasoning-engine"
+    )
+    send_card(card)

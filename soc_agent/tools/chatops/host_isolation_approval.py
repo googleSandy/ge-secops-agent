@@ -1,10 +1,28 @@
-"""
-ChatOps Card: host_isolation_approval
-Modernized Version
-"""
-from card_client import send_card
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+from card_client import send_card, generate_action_url
 
-def get_card():
+def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str = None):
+    """
+    ChatOps Card: host_isolation_approval
+    Modernized Version
+    """
+    
+    isolate_url = generate_action_url(
+        "Isolate Host Now", 
+        session_id=session_id, 
+        agent_engine_id=agent_engine_id, 
+        user_id=user_id
+    )
+    
+    ignore_url = generate_action_url(
+        "Ignore Alert (False Positive)", 
+        session_id=session_id, 
+        agent_engine_id=agent_engine_id, 
+        user_id=user_id
+    )
+
     return {
     "cardsV2": [
       {
@@ -63,11 +81,11 @@ def get_card():
                       {
                         "text": "Isolate Host Now",
                         "color": { "red": 0.8, "green": 0, "blue": 0 },
-                        "onClick": { "openLink": { "url": "https://example.com/isolate" } }
+                        "onClick": { "openLink": { "url": isolate_url } }
                       },
                       {
                         "text": "Ignore (False Positive)",
-                        "onClick": { "openLink": { "url": "https://example.com/ignore" } }
+                        "onClick": { "openLink": { "url": ignore_url } }
                       }
                     ]
                   }
@@ -81,4 +99,16 @@ def get_card():
   }
 
 if __name__ == "__main__":
-    send_card(get_card())
+    # Load environment for manual testing
+    load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
+    
+    session_id = os.getenv("CHATOPS_TEST_SESSION_ID", "test-session")
+    agent_id = os.getenv("AGENT_ENGINE_RESOURCE_NAME", "test-agent")
+    
+    # Send the card
+    card = get_card(
+        session_id=session_id, 
+        agent_engine_id=agent_id, 
+        user_id="vais-query-reasoning-engine"
+    )
+    send_card(card)
