@@ -1,7 +1,35 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import datetime
+from google.cloud import storage
 from soc_agent.tools.chatops.card_client import send_card, generate_action_url
+
+def get_presigned_url(case_id: str) -> str:
+    """Generates a secure temporary link to download the PDF report from GCS."""
+    bucket_name = os.environ.get("GCP_ARTIFACT_BUCKET", "")
+    if bucket_name.startswith("gs://"):
+        bucket_name = bucket_name[5:]
+    if not bucket_name:
+        return ""
+        
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(f"reports/{case_id}_triage_report.pdf")
+        
+        # Determine ambient service account automatically to authorize the signature
+        sa_email = client.get_service_account_email()
+        return blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(hours=24),
+            method="GET",
+            service_account_email=sa_email
+        )
+    except Exception as e:
+        print(f"Failed to generate signed URL: {e}")
+        # Secure fallback requiring user's own GCP auth
+        return f"https://console.cloud.google.com/storage/browser/_details/{bucket_name}/reports/{case_id}_triage_report.pdf"
 
 def get_card(
     session_id: str = None, 
@@ -16,12 +44,7 @@ def get_card(
     Provides a download link for the initial triage report.
     """
     
-    download_url = generate_action_url(
-        "Download Triage Report", 
-        session_id=session_id, 
-        agent_engine_id=agent_engine_id, 
-        user_id=user_id
-    )
+    download_url = get_presigned_url(case_id) or "#"
     
     acknowledge_url = generate_action_url(
         "Acknowledge and Close", 

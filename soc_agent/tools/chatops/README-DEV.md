@@ -21,6 +21,12 @@ A major technical discovery was the `vais-query-reasoning-engine` identity.
 - **V6 API Constraint**: Vertex AI Reasoning Engine sessions are strictly owned by the creator.
 - **Discovery**: We successfully bypassed the "Session does not belong to user" error by identifying the internal system ID used by the Google Cloud Console. This allow the ChatOps system to "impersonate" the playground user for high-fidelity testing.
 
+### 4. Triage Report PDF Downloads (GCS Pre-Signed URLs)
+The "Download Full PDF" button inside the `triage_report_ready` ChatOps card intentionally does *not* route through the standard `generate_action_url` webhook loop. To provide a secure, direct download of the PDF without requiring an intermediate Cloud Function proxy, the codebase natively initializes a `google-cloud-storage` client and securely vends a generated pre-signed URL (expiring in 24 hours). 
+
+- **IAM Permissions**: The ambient runtime service account attached to the Agent Engine container MUST have the explicit **Service Account Token Creator** (`roles/iam.serviceAccountTokenCreator`) role bound *to itself* in order to successfully run `blob.generate_signed_url` synchronously on its own identity natively.
+- **Security Fallback**: If URL signing fails (e.g. absent IAM Token Creator permissions), the card architecture automatically falls back to rendering a direct deep link to the Google Cloud Console Storage Browser UI for the specific object. This guarantees delivery by allowing the user's native GCP console identity to authorize the download instead.
+
 ## Scaling & Performance
 
 - **Lean Containers**: The [Dockerfile](Dockerfile) uses `python:3.10-slim` and a [dedicated requirements.txt](requirements.txt). This results in a **120MB image** (down from 600MB+) and sub-second cold starts on Cloud Run.
