@@ -1,9 +1,17 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from card_client import send_card, generate_action_url
+from soc_agent.tools.chatops.card_client import send_card, generate_action_url
 
-def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str = None):
+def get_card(
+    session_id: str = None, 
+    agent_engine_id: str = None, 
+    user_id: str = None,
+    user_email: str = "User",
+    location: str = "Unknown Location",
+    arrival_time: str = "Unknown Time",
+    **kwargs
+):
     """
     ChatOps Card: traveler_confirmation
     Sent to a traveler to confirm an impossible travel alert and provide context.
@@ -30,8 +38,8 @@ def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str =
                 "cardId": "traveler-confirm",
                 "card": {
                     "header": {
-                        "title": "Security Check: Are you traveling?",
-                        "subtitle": "Recent login activity from London, UK",
+                        "title": f"Security Check: Are you traveling, {user_email}?",
+                        "subtitle": f"Recent login activity from {location}",
                         "imageUrl": "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/security/default/48px.svg",
                         "imageType": "CIRCLE"
                     },
@@ -43,14 +51,14 @@ def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str =
                                 {
                                     "decoratedText": {
                                         "topLabel": "Location",
-                                        "text": "London, United Kingdom",
+                                        "text": location,
                                         "startIcon": { "materialIcon": { "name": "public" } }
                                     }
                                 },
                                 {
                                     "decoratedText": {
                                         "topLabel": "Time",
-                                        "text": "Just now",
+                                        "text": arrival_time,
                                         "startIcon": { "materialIcon": { "name": "schedule" } }
                                     }
                                 }

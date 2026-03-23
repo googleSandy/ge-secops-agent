@@ -116,6 +116,10 @@ from soc_agent.tools.chatops_tools import (  # noqa: E402
     notify_human_incident,
     request_human_confirmation,
     send_chatops_card,
+    verify_user_travel,
+    request_triage_approval,
+    deliver_report,
+    generic_notification,
 )
 
 
@@ -831,6 +835,10 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
         notify_human_incident,
         request_human_confirmation,
         send_chatops_card,
+        verify_user_travel,
+        request_triage_approval,
+        deliver_report,
+        generic_notification,
     ]
 
     # Chronicle for basic entity lookups
@@ -955,6 +963,10 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
         notify_human_incident,
         request_human_confirmation,
         send_chatops_card,
+        verify_user_travel,
+        request_triage_approval,
+        deliver_report,
+        generic_notification,
     ]
 
     if A2UI_ENABLED:

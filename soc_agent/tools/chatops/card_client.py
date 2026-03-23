@@ -3,7 +3,7 @@ import os
 import urllib.parse
 from pathlib import Path
 from dotenv import load_dotenv
-from security import generate_signed_payload
+from soc_agent.tools.chatops.security import generate_signed_payload
 
 def send_card(card_json: dict, webhook_url: str = None):
     """Sends a card to Google Chat via webhook."""
@@ -32,7 +32,7 @@ def generate_action_url(action: str, session_id: str = None, agent_engine_id: st
     load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
     base_url = os.environ.get("CHATOPS_BASE_URL", "https://example.com/chatops")
     
-    if not session_id or not agent_engine_id:
+    if not agent_engine_id:
         # Fallback for manual testing or missing context
         return f"{base_url}/action?action={action}&session=unknown&agent=unknown"
 

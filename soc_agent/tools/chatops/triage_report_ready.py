@@ -1,9 +1,16 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from card_client import send_card, generate_action_url
+from soc_agent.tools.chatops.card_client import send_card, generate_action_url
 
-def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str = None):
+def get_card(
+    session_id: str = None, 
+    agent_engine_id: str = None, 
+    user_id: str = None,
+    case_id: str = "INC-2024",
+    report_summary: str = "12 Hosts Triage / 4 Malicious Findings",
+    **kwargs
+):
     """
     ChatOps Card: triage_report_ready
     Provides a download link for the initial triage report.
@@ -30,7 +37,7 @@ def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str =
                 "card": {
                     "header": {
                         "title": "Triage Report Ready",
-                        "subtitle": "Analysis complete for INC-2024",
+                        "subtitle": f"Analysis complete for {case_id}",
                         "imageUrl": "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/description/default/48px.svg",
                         "imageType": "CIRCLE"
                     },
@@ -40,7 +47,7 @@ def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str =
                                 {
                                     "decoratedText": {
                                         "topLabel": "Scan Coverage",
-                                        "text": "12 Hosts Triage / 4 Malicious Findings",
+                                        "text": report_summary,
                                         "startIcon": { "materialIcon": { "name": "analytics" } }
                                     }
                                 },

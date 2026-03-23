@@ -848,6 +848,8 @@ class AgentEngineManager:
                 "GTI_CACHE_MAX_SIZE": os.environ.get("GTI_CACHE_MAX_SIZE", "250"),
                 # ChatOps Webhook URL (passed to Reasoning Engine)
                 "WEBHOOK_URL": os.environ.get("WEBHOOK_URL"),
+                "CHATOPS_BASE_URL": os.environ.get("CHATOPS_BASE_URL"),
+                "CHRONICLE_CHATOPS_SECRET": os.environ.get("CHRONICLE_CHATOPS_SECRET"),
             }
 
             # Add service account configuration based on authentication method

@@ -1,9 +1,16 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from card_client import send_card, generate_action_url
+from soc_agent.tools.chatops.card_client import send_card, generate_action_url
 
-def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str = None):
+def get_card(
+    session_id: str = None, 
+    agent_engine_id: str = None, 
+    user_id: str = None,
+    finding_summary: str = "<font color=\"#ff0000\">Active C2 identified</font>",
+    target_system: str = "DESKTOP-8291",
+    **kwargs
+):
     """
     ChatOps Card: host_isolation_approval
     Modernized Version
@@ -46,7 +53,7 @@ def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str =
                           {
                             "decoratedText": {
                               "topLabel": "Host Name",
-                              "text": "DESKTOP-8291",
+                              "text": target_system,
                               "startIcon": { "materialIcon": { "name": "computer" } }
                             }
                           }
@@ -69,9 +76,9 @@ def get_card(session_id: str = None, agent_engine_id: str = None, user_id: str =
                 },
                 {
                     "decoratedText": {
-                        "topLabel": "Detection Status",
-                        "text": "<font color=\"#ff0000\">Active C2 identified</font>",
-                        "bottomLabel": "Confirmed via SIEM/EDR logs",
+                        "topLabel": "Detection Status / Finding",
+                        "text": finding_summary,
+                        "bottomLabel": "Automatic analysis output",
                         "startIcon": { "materialIcon": { "name": "security" } }
                     }
                 },
