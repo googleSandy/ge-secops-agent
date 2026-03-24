@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_context_ids(
-    ctx: Context | None = None,
+    ctx: Context,
 ) -> tuple[str | None, str | None, str | None]:
     """
     Extracts session_id, agent_engine_id, and user_id from the ADK Context and environment variables.
@@ -104,7 +104,7 @@ async def send_raw_card(payload: dict) -> str:
         return f"Error sending ChatOps card: {str(e)}"
 
 
-async def dispatch_card(template_name: str, ctx: Context | None, **kwargs) -> str:
+async def dispatch_card(template_name: str, ctx: Context, **kwargs) -> str:
     """
     Dynamically loads and dispatches a Google Chat card from the chatops library.
 
@@ -145,7 +145,7 @@ async def dispatch_card(template_name: str, ctx: Context | None, **kwargs) -> st
 
 
 async def verify_user_travel(
-    user_email: str, location: str, arrival_time: str, ctx: Context | None = None
+    user_email: str, location: str, arrival_time: str, ctx: Context
 ) -> str:
     """
     Sends an impossible travel confirmation card to a user.
@@ -167,7 +167,7 @@ async def verify_user_travel(
 
 
 async def request_triage_approval(
-    finding_summary: str, target_system: str, ctx: Context | None = None
+    finding_summary: str, target_system: str, ctx: Context
 ) -> str:
     """
     Sends an approval card to human analysts for host isolation.
@@ -186,9 +186,7 @@ async def request_triage_approval(
     )
 
 
-async def deliver_report(
-    case_id: str, report_summary: str, ctx: Context | None = None
-) -> str:
+async def deliver_report(case_id: str, report_summary: str, ctx: Context) -> str:
     """
     Sends a card indicating a triage report is ready for download.
     Uses the 'triage_report_ready' template.
@@ -203,9 +201,7 @@ async def deliver_report(
     )
 
 
-async def generic_notification(
-    card_template_name: str, ctx: Context | None = None, **kwargs
-) -> str:
+async def generic_notification(card_template_name: str, ctx: Context, **kwargs) -> str:
     """
     Sends any existing chatops card template by name.
 
@@ -275,7 +271,7 @@ async def request_human_confirmation(
     action_name: str,
     description: str,
     context_data: str,
-    ctx: Context | None = None,
+    ctx: Context,
     approval_url: str = None,
     deny_url: str = None,
 ) -> str:
@@ -416,7 +412,7 @@ async def notify_human_incident(
 # --- AUTO-GENERATED CHATOPS SKILL WRAPPERS ---
 
 
-async def trigger_ai_brute_force_source_block_card(ctx: Context | None = None) -> str:
+async def trigger_ai_brute_force_source_block_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Brute Force Source Block.
     Use this to request human interaction regarding Brute Force Source Block.
@@ -427,7 +423,7 @@ async def trigger_ai_brute_force_source_block_card(ctx: Context | None = None) -
     return await dispatch_card("ai_brute_force_source_block", ctx)
 
 
-async def trigger_ai_canary_token_deployment_card(ctx: Context | None = None) -> str:
+async def trigger_ai_canary_token_deployment_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Canary Token Deployment.
     Use this to request human interaction regarding Canary Token Deployment.
@@ -438,7 +434,7 @@ async def trigger_ai_canary_token_deployment_card(ctx: Context | None = None) ->
     return await dispatch_card("ai_canary_token_deployment", ctx)
 
 
-async def trigger_ai_compliance_violation_alert_card(ctx: Context | None = None) -> str:
+async def trigger_ai_compliance_violation_alert_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Compliance Violation Alert.
     Use this to request human interaction regarding Compliance Violation Alert.
@@ -449,7 +445,7 @@ async def trigger_ai_compliance_violation_alert_card(ctx: Context | None = None)
     return await dispatch_card("ai_compliance_violation_alert", ctx)
 
 
-async def trigger_ai_credential_reset_approval_card(ctx: Context | None = None) -> str:
+async def trigger_ai_credential_reset_approval_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Credential Reset Approval.
     Use this to request human interaction regarding Credential Reset Approval.
@@ -461,7 +457,7 @@ async def trigger_ai_credential_reset_approval_card(ctx: Context | None = None) 
 
 
 async def trigger_ai_data_classification_request_card(
-    ctx: Context | None = None,
+    ctx: Context,
 ) -> str:
     """
     Sends the pre-formatted ChatOps card for Data Classification Request.
@@ -473,7 +469,7 @@ async def trigger_ai_data_classification_request_card(
     return await dispatch_card("ai_data_classification_request", ctx)
 
 
-async def trigger_ai_data_exfiltration_block_card(ctx: Context | None = None) -> str:
+async def trigger_ai_data_exfiltration_block_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Data Exfiltration Block.
     Use this to request human interaction regarding Data Exfiltration Block.
@@ -484,7 +480,7 @@ async def trigger_ai_data_exfiltration_block_card(ctx: Context | None = None) ->
     return await dispatch_card("ai_data_exfiltration_block", ctx)
 
 
-async def trigger_ai_dns_exfiltration_detection_card(ctx: Context | None = None) -> str:
+async def trigger_ai_dns_exfiltration_detection_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Dns Exfiltration Detection.
     Use this to request human interaction regarding Dns Exfiltration Detection.
@@ -495,7 +491,7 @@ async def trigger_ai_dns_exfiltration_detection_card(ctx: Context | None = None)
     return await dispatch_card("ai_dns_exfiltration_detection", ctx)
 
 
-async def trigger_ai_draft_comms_review_card(ctx: Context | None = None) -> str:
+async def trigger_ai_draft_comms_review_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Draft Comms Review.
     Use this to request human interaction regarding Draft Comms Review.
@@ -506,7 +502,7 @@ async def trigger_ai_draft_comms_review_card(ctx: Context | None = None) -> str:
     return await dispatch_card("ai_draft_comms_review", ctx)
 
 
-async def trigger_ai_false_positive_tuning_card(ctx: Context | None = None) -> str:
+async def trigger_ai_false_positive_tuning_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for False Positive Tuning.
     Use this to request human interaction regarding False Positive Tuning.
@@ -517,7 +513,7 @@ async def trigger_ai_false_positive_tuning_card(ctx: Context | None = None) -> s
     return await dispatch_card("ai_false_positive_tuning", ctx)
 
 
-async def trigger_ai_firewall_bypass_request_card(ctx: Context | None = None) -> str:
+async def trigger_ai_firewall_bypass_request_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Firewall Bypass Request.
     Use this to request human interaction regarding Firewall Bypass Request.
@@ -528,7 +524,7 @@ async def trigger_ai_firewall_bypass_request_card(ctx: Context | None = None) ->
     return await dispatch_card("ai_firewall_bypass_request", ctx)
 
 
-async def trigger_ai_forensic_image_approval_card(ctx: Context | None = None) -> str:
+async def trigger_ai_forensic_image_approval_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Forensic Image Approval.
     Use this to request human interaction regarding Forensic Image Approval.
@@ -539,7 +535,7 @@ async def trigger_ai_forensic_image_approval_card(ctx: Context | None = None) ->
     return await dispatch_card("ai_forensic_image_approval", ctx)
 
 
-async def trigger_ai_incident_closure_confirm_card(ctx: Context | None = None) -> str:
+async def trigger_ai_incident_closure_confirm_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Incident Closure Confirm.
     Use this to request human interaction regarding Incident Closure Confirm.
@@ -551,7 +547,7 @@ async def trigger_ai_incident_closure_confirm_card(ctx: Context | None = None) -
 
 
 async def trigger_ai_incident_retrospective_request_card(
-    ctx: Context | None = None,
+    ctx: Context,
 ) -> str:
     """
     Sends the pre-formatted ChatOps card for Incident Retrospective Request.
@@ -563,7 +559,7 @@ async def trigger_ai_incident_retrospective_request_card(
     return await dispatch_card("ai_incident_retrospective_request", ctx)
 
 
-async def trigger_ai_incident_summary_confirm_card(ctx: Context | None = None) -> str:
+async def trigger_ai_incident_summary_confirm_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Incident Summary Confirm.
     Use this to request human interaction regarding Incident Summary Confirm.
@@ -574,7 +570,7 @@ async def trigger_ai_incident_summary_confirm_card(ctx: Context | None = None) -
     return await dispatch_card("ai_incident_summary_confirm", ctx)
 
 
-async def trigger_ai_malicious_container_kill_card(ctx: Context | None = None) -> str:
+async def trigger_ai_malicious_container_kill_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Malicious Container Kill.
     Use this to request human interaction regarding Malicious Container Kill.
@@ -585,7 +581,7 @@ async def trigger_ai_malicious_container_kill_card(ctx: Context | None = None) -
     return await dispatch_card("ai_malicious_container_kill", ctx)
 
 
-async def trigger_ai_malicious_domain_sinkhole_card(ctx: Context | None = None) -> str:
+async def trigger_ai_malicious_domain_sinkhole_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Malicious Domain Sinkhole.
     Use this to request human interaction regarding Malicious Domain Sinkhole.
@@ -596,7 +592,7 @@ async def trigger_ai_malicious_domain_sinkhole_card(ctx: Context | None = None) 
     return await dispatch_card("ai_malicious_domain_sinkhole", ctx)
 
 
-async def trigger_ai_network_scan_approval_card(ctx: Context | None = None) -> str:
+async def trigger_ai_network_scan_approval_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Network Scan Approval.
     Use this to request human interaction regarding Network Scan Approval.
@@ -607,7 +603,7 @@ async def trigger_ai_network_scan_approval_card(ctx: Context | None = None) -> s
     return await dispatch_card("ai_network_scan_approval", ctx)
 
 
-async def trigger_ai_playbook_selection_card(ctx: Context | None = None) -> str:
+async def trigger_ai_playbook_selection_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Playbook Selection.
     Use this to request human interaction regarding Playbook Selection.
@@ -618,7 +614,7 @@ async def trigger_ai_playbook_selection_card(ctx: Context | None = None) -> str:
     return await dispatch_card("ai_playbook_selection", ctx)
 
 
-async def trigger_ai_privilege_access_v2_card(ctx: Context | None = None) -> str:
+async def trigger_ai_privilege_access_v2_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Privilege Access V2.
     Use this to request human interaction regarding Privilege Access V2.
@@ -630,7 +626,7 @@ async def trigger_ai_privilege_access_v2_card(ctx: Context | None = None) -> str
 
 
 async def trigger_ai_privileged_session_recording_card(
-    ctx: Context | None = None,
+    ctx: Context,
 ) -> str:
     """
     Sends the pre-formatted ChatOps card for Privileged Session Recording.
@@ -642,7 +638,7 @@ async def trigger_ai_privileged_session_recording_card(
     return await dispatch_card("ai_privileged_session_recording", ctx)
 
 
-async def trigger_ai_security_group_audit_card(ctx: Context | None = None) -> str:
+async def trigger_ai_security_group_audit_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Security Group Audit.
     Use this to request human interaction regarding Security Group Audit.
@@ -653,7 +649,7 @@ async def trigger_ai_security_group_audit_card(ctx: Context | None = None) -> st
     return await dispatch_card("ai_security_group_audit", ctx)
 
 
-async def trigger_ai_sensitive_log_access_card(ctx: Context | None = None) -> str:
+async def trigger_ai_sensitive_log_access_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Sensitive Log Access.
     Use this to request human interaction regarding Sensitive Log Access.
@@ -664,7 +660,7 @@ async def trigger_ai_sensitive_log_access_card(ctx: Context | None = None) -> st
     return await dispatch_card("ai_sensitive_log_access", ctx)
 
 
-async def trigger_ai_stale_account_cleanup_card(ctx: Context | None = None) -> str:
+async def trigger_ai_stale_account_cleanup_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Stale Account Cleanup.
     Use this to request human interaction regarding Stale Account Cleanup.
@@ -675,7 +671,7 @@ async def trigger_ai_stale_account_cleanup_card(ctx: Context | None = None) -> s
     return await dispatch_card("ai_stale_account_cleanup", ctx)
 
 
-async def trigger_ai_suspicious_login_location_card(ctx: Context | None = None) -> str:
+async def trigger_ai_suspicious_login_location_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Suspicious Login Location.
     Use this to request human interaction regarding Suspicious Login Location.
@@ -686,7 +682,7 @@ async def trigger_ai_suspicious_login_location_card(ctx: Context | None = None) 
     return await dispatch_card("ai_suspicious_login_location", ctx)
 
 
-async def trigger_ai_suspicious_process_kill_card(ctx: Context | None = None) -> str:
+async def trigger_ai_suspicious_process_kill_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Suspicious Process Kill.
     Use this to request human interaction regarding Suspicious Process Kill.
@@ -697,7 +693,7 @@ async def trigger_ai_suspicious_process_kill_card(ctx: Context | None = None) ->
     return await dispatch_card("ai_suspicious_process_kill", ctx)
 
 
-async def trigger_ai_threat_hunt_hypothesis_card(ctx: Context | None = None) -> str:
+async def trigger_ai_threat_hunt_hypothesis_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Threat Hunt Hypothesis.
     Use this to request human interaction regarding Threat Hunt Hypothesis.
@@ -708,7 +704,7 @@ async def trigger_ai_threat_hunt_hypothesis_card(ctx: Context | None = None) -> 
     return await dispatch_card("ai_threat_hunt_hypothesis", ctx)
 
 
-async def trigger_ai_threat_intel_sharing_card(ctx: Context | None = None) -> str:
+async def trigger_ai_threat_intel_sharing_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Threat Intel Sharing.
     Use this to request human interaction regarding Threat Intel Sharing.
@@ -719,7 +715,7 @@ async def trigger_ai_threat_intel_sharing_card(ctx: Context | None = None) -> st
     return await dispatch_card("ai_threat_intel_sharing", ctx)
 
 
-async def trigger_ai_user_interview_request_card(ctx: Context | None = None) -> str:
+async def trigger_ai_user_interview_request_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for User Interview Request.
     Use this to request human interaction regarding User Interview Request.
@@ -730,7 +726,7 @@ async def trigger_ai_user_interview_request_card(ctx: Context | None = None) -> 
     return await dispatch_card("ai_user_interview_request", ctx)
 
 
-async def trigger_ai_user_privilege_audit_card(ctx: Context | None = None) -> str:
+async def trigger_ai_user_privilege_audit_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for User Privilege Audit.
     Use this to request human interaction regarding User Privilege Audit.
@@ -741,7 +737,7 @@ async def trigger_ai_user_privilege_audit_card(ctx: Context | None = None) -> st
     return await dispatch_card("ai_user_privilege_audit", ctx)
 
 
-async def trigger_ai_vulnerability_revalidation_card(ctx: Context | None = None) -> str:
+async def trigger_ai_vulnerability_revalidation_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Vulnerability Revalidation.
     Use this to request human interaction regarding Vulnerability Revalidation.
@@ -752,7 +748,7 @@ async def trigger_ai_vulnerability_revalidation_card(ctx: Context | None = None)
     return await dispatch_card("ai_vulnerability_revalidation", ctx)
 
 
-async def trigger_ai_wipe_host_approval_card(ctx: Context | None = None) -> str:
+async def trigger_ai_wipe_host_approval_card(ctx: Context) -> str:
     """
     Sends the pre-formatted ChatOps card for Wipe Host Approval.
     Use this to request human interaction regarding Wipe Host Approval.
@@ -763,7 +759,7 @@ async def trigger_ai_wipe_host_approval_card(ctx: Context | None = None) -> str:
     return await dispatch_card("ai_wipe_host_approval", ctx)
 
 
-async def trigger_brute_force_alert_card(ctx: Context | None = None) -> str:
+async def trigger_brute_force_alert_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Brute Force Alert.
 
@@ -773,7 +769,7 @@ async def trigger_brute_force_alert_card(ctx: Context | None = None) -> str:
     return await dispatch_card("brute_force_alert", ctx)
 
 
-async def trigger_bulk_deletion_verification_card(ctx: Context | None = None) -> str:
+async def trigger_bulk_deletion_verification_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Bulk Deletion Verification.
 
@@ -783,7 +779,7 @@ async def trigger_bulk_deletion_verification_card(ctx: Context | None = None) ->
     return await dispatch_card("bulk_deletion_verification", ctx)
 
 
-async def trigger_forensics_evidence_ready_card(ctx: Context | None = None) -> str:
+async def trigger_forensics_evidence_ready_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Forensics Evidence Ready.
 
@@ -793,7 +789,7 @@ async def trigger_forensics_evidence_ready_card(ctx: Context | None = None) -> s
     return await dispatch_card("forensics_evidence_ready", ctx)
 
 
-async def trigger_impossible_travel_alert_card(ctx: Context | None = None) -> str:
+async def trigger_impossible_travel_alert_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Impossible Travel Alert.
 
@@ -804,7 +800,7 @@ async def trigger_impossible_travel_alert_card(ctx: Context | None = None) -> st
 
 
 async def trigger_impossible_travel_verification_card(
-    ctx: Context | None = None,
+    ctx: Context,
 ) -> str:
     """
     Sends the ChatOps notification card for Impossible Travel Verification.
@@ -815,7 +811,7 @@ async def trigger_impossible_travel_verification_card(
     return await dispatch_card("impossible_travel_verification", ctx)
 
 
-async def trigger_ioc_enrichment_card_card(ctx: Context | None = None) -> str:
+async def trigger_ioc_enrichment_card_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Ioc Enrichment Card.
 
@@ -825,7 +821,7 @@ async def trigger_ioc_enrichment_card_card(ctx: Context | None = None) -> str:
     return await dispatch_card("ioc_enrichment_card", ctx)
 
 
-async def trigger_malware_sandbox_report_card(ctx: Context | None = None) -> str:
+async def trigger_malware_sandbox_report_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Malware Sandbox Report.
 
@@ -835,7 +831,7 @@ async def trigger_malware_sandbox_report_card(ctx: Context | None = None) -> str
     return await dispatch_card("malware_sandbox_report", ctx)
 
 
-async def trigger_mfa_api_key_alert_card(ctx: Context | None = None) -> str:
+async def trigger_mfa_api_key_alert_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Mfa Api Key Alert.
 
@@ -845,7 +841,7 @@ async def trigger_mfa_api_key_alert_card(ctx: Context | None = None) -> str:
     return await dispatch_card("mfa_api_key_alert", ctx)
 
 
-async def trigger_phishing_report_summary_card(ctx: Context | None = None) -> str:
+async def trigger_phishing_report_summary_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Phishing Report Summary.
 
@@ -855,7 +851,7 @@ async def trigger_phishing_report_summary_card(ctx: Context | None = None) -> st
     return await dispatch_card("phishing_report_summary", ctx)
 
 
-async def trigger_shadow_it_discovery_card(ctx: Context | None = None) -> str:
+async def trigger_shadow_it_discovery_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Shadow It Discovery.
 
@@ -865,7 +861,7 @@ async def trigger_shadow_it_discovery_card(ctx: Context | None = None) -> str:
     return await dispatch_card("shadow_it_discovery", ctx)
 
 
-async def trigger_temp_admin_request_card(ctx: Context | None = None) -> str:
+async def trigger_temp_admin_request_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Temp Admin Request.
 
@@ -875,7 +871,7 @@ async def trigger_temp_admin_request_card(ctx: Context | None = None) -> str:
     return await dispatch_card("temp_admin_request", ctx)
 
 
-async def trigger_vulnerability_patch_approval_card(ctx: Context | None = None) -> str:
+async def trigger_vulnerability_patch_approval_card(ctx: Context) -> str:
     """
     Sends the ChatOps notification card for Vulnerability Patch Approval.
 
@@ -885,7 +881,7 @@ async def trigger_vulnerability_patch_approval_card(ctx: Context | None = None) 
     return await dispatch_card("vulnerability_patch_approval", ctx)
 
 
-async def list_chatops_capabilities(ctx: Context | None = None) -> str:
+async def list_chatops_capabilities(ctx: Context) -> str:
     """
     Returns an exhaustive list and descriptions of all available ChatOps skills, cards, and notification templates.
     Use this tool to discover what specific notification templates (e.g., ai_wipe_host_approval, ai_malicious_container_kill)
@@ -914,7 +910,7 @@ async def list_chatops_capabilities(ctx: Context | None = None) -> str:
         return f"Error reading ChatOps capabilities: {e}"
 
 
-async def send_all_example_cards(ctx: Context | None = None) -> str:
+async def send_all_example_cards(ctx: Context) -> str:
     """
     Sends one of each kind of predefined ChatOps card to the configured webhook.
     This is useful for demos and quality control to visualize all available templates.
