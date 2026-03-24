@@ -19,7 +19,7 @@ def get_presigned_url(case_id: str) -> str:
     try:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
-        blob = bucket.blob(f"reports/{case_id}_triage_report.pdf")
+        blob = bucket.blob(f"archive/{case_id}_triage_report.pdf")
 
         # Determine ambient service account automatically to authorize the signature
         sa_email = client.get_service_account_email()

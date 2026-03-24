@@ -376,9 +376,7 @@ async def notify_human_incident(
             "decoratedText": {
                 "topLabel": "Severity",
                 "text": severity,
-                "startIcon": {
-                    "iconUrl": "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/warning/default/24px.svg"
-                },
+                "startIcon": {"materialIcon": {"name": "report_problem"}},
             }
         },
         {"textParagraph": {"text": f"<b>Summary:</b> {summary}"}},
