@@ -870,42 +870,50 @@ async def trigger_temp_admin_request_card(ctx: Context) -> str:
 
 
 async def trigger_vulnerability_patch_approval_card(
-    cve_id: str,
-    software_name: str,
-    software_version: str,
-    cvss_score: str,
-    finding_summary: str,
-    remediation_notes: str,
-    target_system: str,
-    cve_link: str,
     ctx: Context,
+    cve_id: str = None,
+    software_name: str = None,
+    software_version: str = None,
+    cvss_score: str = None,
+    finding_summary: str = None,
+    remediation_notes: str = None,
+    target_system: str = None,
+    cve_link: str = None,
 ) -> str:
     """
     Sends the ChatOps notification card for Vulnerability Patch Approval.
 
     Args:
-        cve_id: The CVE identifier (e.g., "CVE-2024-3094").
-        software_name: The name of the vulnerable software (e.g., "XZ Utils").
-        software_version: The vulnerable version found (e.g., "5.6.0").
-        cvss_score: The CVSS severity score (e.g., "10.0 (Critical)").
+        ctx: The ADK context (injected automatically).
+        cve_id: The CVE identifier (e.g., "CVE-2026-1603").
+        software_name: The name of the vulnerable software (e.g., "Ivanti Endpoint Manager (EPM)").
+        software_version: The vulnerable version found (e.g., "2024 SU4 SR1").
+        cvss_score: The CVSS severity score (e.g., "8.6 (High)").
         finding_summary: A summary of the vulnerability impact.
         remediation_notes: Analyst recommendations for patching or mitigating.
         target_system: The hostname or IP of the vulnerable system.
-        cve_link: A URL linking to the CVE details (e.g., NVD or vendor advisory).
-        ctx: The ADK context (injected automatically).
+        cve_link: A URL linking to the CVE details.
     """
-    return await dispatch_card(
-        "vulnerability_patch_approval",
-        ctx,
-        cve_id=cve_id,
-        software_name=software_name,
-        software_version=software_version,
-        cvss_score=cvss_score,
-        finding_summary=finding_summary,
-        remediation_notes=remediation_notes,
-        target_system=target_system,
-        cve_link=cve_link,
-    )
+    # Build kwargs dynamically, only including non-None values to allow template defaults to shine through
+    vuln_args = {}
+    if cve_id:
+        vuln_args["cve_id"] = cve_id
+    if software_name:
+        vuln_args["software_name"] = software_name
+    if software_version:
+        vuln_args["software_version"] = software_version
+    if cvss_score:
+        vuln_args["cvss_score"] = cvss_score
+    if finding_summary:
+        vuln_args["finding_summary"] = finding_summary
+    if remediation_notes:
+        vuln_args["remediation_notes"] = remediation_notes
+    if target_system:
+        vuln_args["target_system"] = target_system
+    if cve_link:
+        vuln_args["cve_link"] = cve_link
+
+    return await dispatch_card("vulnerability_patch_approval", ctx, **vuln_args)
 
 
 async def list_chatops_capabilities(ctx: Context) -> str:
