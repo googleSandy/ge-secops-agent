@@ -1293,6 +1293,7 @@ IMPORTANT GUIDELINES:
 - Always indicate which specialist you consulted or delegated to
 - **Preserve all grounding citations and source links** from RAG knowledge base results
 - **Artifact Linking:** Whenever a report or document is saved using the `save_report_artifact` tool, you MUST include the exact markdown link returned by the tool in your final response to the user.
+- **Report Delivery:** Whenever a report Artifact is generated and saved using `save_report_artifact`, you MUST ALSO call the `deliver_report` tool to send the "Triage Report Ready" ChatOps card to the team.
 """
 
     if A2UI_ENABLED:
