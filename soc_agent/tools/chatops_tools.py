@@ -330,10 +330,12 @@ async def request_human_confirmation(
                         "buttons": [
                             {
                                 "text": "Approve",
+                                "color": {"red": 0.1, "green": 0.6, "blue": 0.1},
                                 "onClick": {"openLink": {"url": approval_url}},
                             },
                             {
                                 "text": "Deny",
+                                "color": {"red": 0.8, "green": 0, "blue": 0},
                                 "onClick": {"openLink": {"url": deny_url}},
                             },
                         ]
