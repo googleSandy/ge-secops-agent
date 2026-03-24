@@ -869,14 +869,43 @@ async def trigger_temp_admin_request_card(ctx: Context) -> str:
     return await dispatch_card("temp_admin_request", ctx)
 
 
-async def trigger_vulnerability_patch_approval_card(ctx: Context) -> str:
+async def trigger_vulnerability_patch_approval_card(
+    cve_id: str,
+    software_name: str,
+    software_version: str,
+    cvss_score: str,
+    finding_summary: str,
+    remediation_notes: str,
+    target_system: str,
+    cve_link: str,
+    ctx: Context,
+) -> str:
     """
     Sends the ChatOps notification card for Vulnerability Patch Approval.
 
     Args:
+        cve_id: The CVE identifier (e.g., "CVE-2024-3094").
+        software_name: The name of the vulnerable software (e.g., "XZ Utils").
+        software_version: The vulnerable version found (e.g., "5.6.0").
+        cvss_score: The CVSS severity score (e.g., "10.0 (Critical)").
+        finding_summary: A summary of the vulnerability impact.
+        remediation_notes: Analyst recommendations for patching or mitigating.
+        target_system: The hostname or IP of the vulnerable system.
+        cve_link: A URL linking to the CVE details (e.g., NVD or vendor advisory).
         ctx: The ADK context (injected automatically).
     """
-    return await dispatch_card("vulnerability_patch_approval", ctx)
+    return await dispatch_card(
+        "vulnerability_patch_approval",
+        ctx,
+        cve_id=cve_id,
+        software_name=software_name,
+        software_version=software_version,
+        cvss_score=cvss_score,
+        finding_summary=finding_summary,
+        remediation_notes=remediation_notes,
+        target_system=target_system,
+        cve_link=cve_link,
+    )
 
 
 async def list_chatops_capabilities(ctx: Context) -> str:
