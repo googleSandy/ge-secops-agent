@@ -1,64 +1,82 @@
+import importlib
 import logging
 import os
 
 import httpx
-from typing import Optional
-import importlib
 from google.adk.agents.context import Context
+
 from soc_agent.tools.chatops.card_client import generate_action_url
 
 
 logger = logging.getLogger(__name__)
 
 
-def _get_context_ids(ctx: Optional[Context] = None) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def _get_context_ids(
+    ctx: Context | None = None,
+) -> tuple[str | None, str | None, str | None]:
     """
     Extracts session_id, agent_engine_id, and user_id from the ADK Context and environment variables.
     Handles quote stripping and fallback logic for Playground testing.
     """
     session_id = None
-    
+
     # 1. Provide safe extraction for AGENT_ENGINE_ID (quote stripping)
     agent_engine_id = os.environ.get("AGENT_ENGINE_RESOURCE_NAME")
     if agent_engine_id:
         agent_engine_id = agent_engine_id.strip("'").strip('"')
-        
+
     # 2. Extract Session ID (with liberal logging for debug)
     if ctx:
         logger.info(f"[CHATOPS DEBUG] Inspecting Context object: dir={dir(ctx)}")
         if hasattr(ctx, "session"):
-            logger.info(f"[CHATOPS DEBUG] Found ctx.session. Type={type(ctx.session)}, Value={ctx.session}")
+            logger.info(
+                f"[CHATOPS DEBUG] Found ctx.session. Type={type(ctx.session)}, Value={ctx.session}"
+            )
             if hasattr(ctx.session, "id"):
                 session_id = ctx.session.id
             elif isinstance(ctx.session, str) and ctx.session:
                 session_id = ctx.session
-                
-            if not agent_engine_id and hasattr(ctx.session, "app_name") and ctx.session.app_name:
+
+            if (
+                not agent_engine_id
+                and hasattr(ctx.session, "app_name")
+                and ctx.session.app_name
+            ):
                 agent_engine_id = ctx.session.app_name
-                logger.info(f"[CHATOPS DEBUG] Natively resolved agent_engine_id from ADK session: {agent_engine_id}")
+                logger.info(
+                    f"[CHATOPS DEBUG] Natively resolved agent_engine_id from ADK session: {agent_engine_id}"
+                )
         elif hasattr(ctx, "_invocation_context"):
-            logger.info(f"[CHATOPS DEBUG] Found ctx._invocation_context. Inspecting...")
+            logger.info("[CHATOPS DEBUG] Found ctx._invocation_context. Inspecting...")
             if hasattr(ctx._invocation_context, "session"):
                 if hasattr(ctx._invocation_context.session, "id"):
                     session_id = ctx._invocation_context.session.id
                 elif isinstance(ctx._invocation_context.session, str):
                     session_id = ctx._invocation_context.session
 
-                if not agent_engine_id and hasattr(ctx._invocation_context.session, "app_name") and ctx._invocation_context.session.app_name:
+                if (
+                    not agent_engine_id
+                    and hasattr(ctx._invocation_context.session, "app_name")
+                    and ctx._invocation_context.session.app_name
+                ):
                     agent_engine_id = ctx._invocation_context.session.app_name
-                    logger.info(f"[CHATOPS DEBUG] Natively resolved agent_engine_id from ADK context wrapper: {agent_engine_id}")
+                    logger.info(
+                        f"[CHATOPS DEBUG] Natively resolved agent_engine_id from ADK context wrapper: {agent_engine_id}"
+                    )
 
         if not session_id:
-            logger.warning(f"[CHATOPS DEBUG] Failed to extract session_id! Dumping full Context __dict__: {getattr(ctx, '__dict__', 'No __dict__')}")
-            
+            logger.warning(
+                f"[CHATOPS DEBUG] Failed to extract session_id! Dumping full Context __dict__: {getattr(ctx, '__dict__', 'No __dict__')}"
+            )
+
     # 3. Extract User ID with Fallback
     user_id = None
     if ctx and hasattr(ctx, "user_id") and ctx.user_id:
-         user_id = ctx.user_id
+        user_id = ctx.user_id
     else:
-         # Fallback for Playground identity lock compliance
-         user_id = "vais-query-reasoning-engine"
-         
+        # Fallback for Playground identity lock compliance
+        user_id = "vais-query-reasoning-engine"
+
     return session_id, agent_engine_id, user_id
 
 
@@ -86,10 +104,10 @@ async def send_raw_card(payload: dict) -> str:
         return f"Error sending ChatOps card: {str(e)}"
 
 
-async def dispatch_card(template_name: str, ctx: Optional[Context], **kwargs) -> str:
+async def dispatch_card(template_name: str, ctx: Context | None, **kwargs) -> str:
     """
     Dynamically loads and dispatches a Google Chat card from the chatops library.
-    
+
     Args:
         template_name: The name of the python module in soc_agent.tools.chatops (without .py)
         ctx: ADK Context to extract session and user IDs
@@ -98,26 +116,27 @@ async def dispatch_card(template_name: str, ctx: Optional[Context], **kwargs) ->
     try:
         import sys
         from pathlib import Path
+
         chatops_path = str(Path(__file__).parent / "chatops")
         if chatops_path not in sys.path:
             sys.path.insert(0, chatops_path)
-            
+
         module = importlib.import_module(f"soc_agent.tools.chatops.{template_name}")
         if not hasattr(module, "get_card"):
             return f"Error: Template '{template_name}' does not implement get_card()."
-            
+
         session_id, agent_engine_id, user_id = _get_context_ids(ctx)
-        
+
         # Inject standard context args securely
         kwargs["session_id"] = session_id
         kwargs["agent_engine_id"] = agent_engine_id
         kwargs["user_id"] = user_id
-        
+
         # All modern cards return a full `{"cardsV2": [...]}` dict
         card_content = module.get_card(**kwargs)
-        
+
         return await send_raw_card(card_content)
-        
+
     except ImportError:
         return f"Error: Card template '{template_name}' not found."
     except Exception as e:
@@ -125,11 +144,13 @@ async def dispatch_card(template_name: str, ctx: Optional[Context], **kwargs) ->
         return f"Error dispatching card: {e}"
 
 
-async def verify_user_travel(user_email: str, location: str, arrival_time: str, ctx: Context = None) -> str:
+async def verify_user_travel(
+    user_email: str, location: str, arrival_time: str, ctx: Context = None
+) -> str:
     """
     Sends an impossible travel confirmation card to a user.
     Uses the 'traveler_confirmation' template.
-    
+
     Args:
         user_email: The email of the affected user.
         location: The suspicious travel location.
@@ -137,51 +158,55 @@ async def verify_user_travel(user_email: str, location: str, arrival_time: str, 
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card(
-        "traveler_confirmation", 
-        ctx, 
-        user_email=user_email, 
-        location=location, 
-        arrival_time=arrival_time
+        "traveler_confirmation",
+        ctx,
+        user_email=user_email,
+        location=location,
+        arrival_time=arrival_time,
     )
 
-async def request_triage_approval(finding_summary: str, target_system: str, ctx: Context = None) -> str:
+
+async def request_triage_approval(
+    finding_summary: str, target_system: str, ctx: Context = None
+) -> str:
     """
     Sends an approval card to human analysts for host isolation.
     Uses the 'host_isolation_approval' template.
-    
+
     Args:
         finding_summary: Why this system needs isolation.
         target_system: The hostname or IP to isolate.
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card(
-        "host_isolation_approval", 
-        ctx, 
-        finding_summary=finding_summary, 
-        target_system=target_system
+        "host_isolation_approval",
+        ctx,
+        finding_summary=finding_summary,
+        target_system=target_system,
     )
+
 
 async def deliver_report(case_id: str, report_summary: str, ctx: Context = None) -> str:
     """
     Sends a card indicating a triage report is ready for download.
     Uses the 'triage_report_ready' template.
-    
+
     Args:
         case_id: The ID of the investigation.
         report_summary: A brief summary of the findings.
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card(
-        "triage_report_ready", 
-        ctx, 
-        case_id=case_id, 
-        report_summary=report_summary
+        "triage_report_ready", ctx, case_id=case_id, report_summary=report_summary
     )
 
-async def generic_notification(card_template_name: str, ctx: Context = None, **kwargs) -> str:
+
+async def generic_notification(
+    card_template_name: str, ctx: Context = None, **kwargs
+) -> str:
     """
     Sends any existing chatops card template by name.
-    
+
     Args:
         card_template_name: The name of the python module (e.g. 'impossible_travel_alert' or 'ai_stale_account_cleanup').
         ctx: The ADK Context (injected automatically).
@@ -269,9 +294,13 @@ async def request_human_confirmation(
 
     # Generate signed URLs if not explicitly provided
     if not approval_url:
-        approval_url = generate_action_url(f"Approve {action_name}", session_id, agent_engine_id, user_id=user_id)
+        approval_url = generate_action_url(
+            f"Approve {action_name}", session_id, agent_engine_id, user_id=user_id
+        )
     if not deny_url:
-        deny_url = generate_action_url(f"Deny {action_name}", session_id, agent_engine_id, user_id=user_id)
+        deny_url = generate_action_url(
+            f"Deny {action_name}", session_id, agent_engine_id, user_id=user_id
+        )
 
     sections = [
         {
@@ -347,7 +376,9 @@ async def notify_human_incident(
             "decoratedText": {
                 "topLabel": "Severity",
                 "text": severity,
-                "startIcon": {"iconUrl": "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/warning/default/24px.svg"},
+                "startIcon": {
+                    "iconUrl": "https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/warning/default/24px.svg"
+                },
             }
         },
         {"textParagraph": {"text": f"<b>Summary:</b> {summary}"}},
@@ -380,421 +411,492 @@ async def notify_human_incident(
 
 # --- AUTO-GENERATED CHATOPS SKILL WRAPPERS ---
 
+
 async def trigger_ai_brute_force_source_block_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Brute Force Source Block.
     Use this to request human interaction regarding Brute Force Source Block.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_brute_force_source_block", ctx)
 
+
 async def trigger_ai_canary_token_deployment_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Canary Token Deployment.
     Use this to request human interaction regarding Canary Token Deployment.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_canary_token_deployment", ctx)
 
+
 async def trigger_ai_compliance_violation_alert_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Compliance Violation Alert.
     Use this to request human interaction regarding Compliance Violation Alert.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_compliance_violation_alert", ctx)
 
+
 async def trigger_ai_credential_reset_approval_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Credential Reset Approval.
     Use this to request human interaction regarding Credential Reset Approval.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_credential_reset_approval", ctx)
 
+
 async def trigger_ai_data_classification_request_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Data Classification Request.
     Use this to request human interaction regarding Data Classification Request.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_data_classification_request", ctx)
 
+
 async def trigger_ai_data_exfiltration_block_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Data Exfiltration Block.
     Use this to request human interaction regarding Data Exfiltration Block.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_data_exfiltration_block", ctx)
 
+
 async def trigger_ai_dns_exfiltration_detection_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Dns Exfiltration Detection.
     Use this to request human interaction regarding Dns Exfiltration Detection.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_dns_exfiltration_detection", ctx)
 
+
 async def trigger_ai_draft_comms_review_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Draft Comms Review.
     Use this to request human interaction regarding Draft Comms Review.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_draft_comms_review", ctx)
 
+
 async def trigger_ai_false_positive_tuning_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for False Positive Tuning.
     Use this to request human interaction regarding False Positive Tuning.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_false_positive_tuning", ctx)
 
+
 async def trigger_ai_firewall_bypass_request_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Firewall Bypass Request.
     Use this to request human interaction regarding Firewall Bypass Request.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_firewall_bypass_request", ctx)
 
+
 async def trigger_ai_forensic_image_approval_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Forensic Image Approval.
     Use this to request human interaction regarding Forensic Image Approval.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_forensic_image_approval", ctx)
 
+
 async def trigger_ai_incident_closure_confirm_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Incident Closure Confirm.
     Use this to request human interaction regarding Incident Closure Confirm.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_incident_closure_confirm", ctx)
 
+
 async def trigger_ai_incident_retrospective_request_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Incident Retrospective Request.
     Use this to request human interaction regarding Incident Retrospective Request.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_incident_retrospective_request", ctx)
 
+
 async def trigger_ai_incident_summary_confirm_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Incident Summary Confirm.
     Use this to request human interaction regarding Incident Summary Confirm.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_incident_summary_confirm", ctx)
 
+
 async def trigger_ai_malicious_container_kill_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Malicious Container Kill.
     Use this to request human interaction regarding Malicious Container Kill.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_malicious_container_kill", ctx)
 
+
 async def trigger_ai_malicious_domain_sinkhole_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Malicious Domain Sinkhole.
     Use this to request human interaction regarding Malicious Domain Sinkhole.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_malicious_domain_sinkhole", ctx)
 
+
 async def trigger_ai_network_scan_approval_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Network Scan Approval.
     Use this to request human interaction regarding Network Scan Approval.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_network_scan_approval", ctx)
 
+
 async def trigger_ai_playbook_selection_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Playbook Selection.
     Use this to request human interaction regarding Playbook Selection.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_playbook_selection", ctx)
 
+
 async def trigger_ai_privilege_access_v2_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Privilege Access V2.
     Use this to request human interaction regarding Privilege Access V2.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_privilege_access_v2", ctx)
 
+
 async def trigger_ai_privileged_session_recording_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Privileged Session Recording.
     Use this to request human interaction regarding Privileged Session Recording.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_privileged_session_recording", ctx)
 
+
 async def trigger_ai_security_group_audit_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Security Group Audit.
     Use this to request human interaction regarding Security Group Audit.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_security_group_audit", ctx)
 
+
 async def trigger_ai_sensitive_log_access_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Sensitive Log Access.
     Use this to request human interaction regarding Sensitive Log Access.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_sensitive_log_access", ctx)
 
+
 async def trigger_ai_stale_account_cleanup_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Stale Account Cleanup.
     Use this to request human interaction regarding Stale Account Cleanup.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_stale_account_cleanup", ctx)
 
+
 async def trigger_ai_suspicious_login_location_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Suspicious Login Location.
     Use this to request human interaction regarding Suspicious Login Location.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_suspicious_login_location", ctx)
 
+
 async def trigger_ai_suspicious_process_kill_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Suspicious Process Kill.
     Use this to request human interaction regarding Suspicious Process Kill.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_suspicious_process_kill", ctx)
 
+
 async def trigger_ai_threat_hunt_hypothesis_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Threat Hunt Hypothesis.
     Use this to request human interaction regarding Threat Hunt Hypothesis.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_threat_hunt_hypothesis", ctx)
 
+
 async def trigger_ai_threat_intel_sharing_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Threat Intel Sharing.
     Use this to request human interaction regarding Threat Intel Sharing.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_threat_intel_sharing", ctx)
 
+
 async def trigger_ai_user_interview_request_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for User Interview Request.
     Use this to request human interaction regarding User Interview Request.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_user_interview_request", ctx)
 
+
 async def trigger_ai_user_privilege_audit_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for User Privilege Audit.
     Use this to request human interaction regarding User Privilege Audit.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_user_privilege_audit", ctx)
 
+
 async def trigger_ai_vulnerability_revalidation_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Vulnerability Revalidation.
     Use this to request human interaction regarding Vulnerability Revalidation.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_vulnerability_revalidation", ctx)
 
+
 async def trigger_ai_wipe_host_approval_card(ctx: Context = None) -> str:
     """
     Sends the pre-formatted ChatOps card for Wipe Host Approval.
     Use this to request human interaction regarding Wipe Host Approval.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ai_wipe_host_approval", ctx)
 
+
 async def trigger_brute_force_alert_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Brute Force Alert.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("brute_force_alert", ctx)
 
+
 async def trigger_bulk_deletion_verification_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Bulk Deletion Verification.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("bulk_deletion_verification", ctx)
 
+
 async def trigger_forensics_evidence_ready_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Forensics Evidence Ready.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("forensics_evidence_ready", ctx)
 
+
 async def trigger_impossible_travel_alert_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Impossible Travel Alert.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("impossible_travel_alert", ctx)
 
+
 async def trigger_impossible_travel_verification_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Impossible Travel Verification.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("impossible_travel_verification", ctx)
 
+
 async def trigger_ioc_enrichment_card_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Ioc Enrichment Card.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("ioc_enrichment_card", ctx)
 
+
 async def trigger_malware_sandbox_report_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Malware Sandbox Report.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("malware_sandbox_report", ctx)
 
+
 async def trigger_mfa_api_key_alert_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Mfa Api Key Alert.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("mfa_api_key_alert", ctx)
 
+
 async def trigger_phishing_report_summary_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Phishing Report Summary.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("phishing_report_summary", ctx)
 
+
 async def trigger_shadow_it_discovery_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Shadow It Discovery.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("shadow_it_discovery", ctx)
 
+
 async def trigger_temp_admin_request_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Temp Admin Request.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("temp_admin_request", ctx)
 
+
 async def trigger_vulnerability_patch_approval_card(ctx: Context = None) -> str:
     """
     Sends the ChatOps notification card for Vulnerability Patch Approval.
-    
+
     Args:
         ctx: The ADK context (injected automatically).
     """
     return await dispatch_card("vulnerability_patch_approval", ctx)
 
+
+async def list_chatops_capabilities(ctx: Context | None = None) -> str:
+    """
+    Returns an exhaustive list and descriptions of all available ChatOps skills, cards, and notification templates.
+    Use this tool to discover what specific notification templates (e.g., ai_wipe_host_approval, ai_malicious_container_kill)
+    are available for the generic_notification dispatcher, and to understand the capabilities of the core ChatOps tools.
+    """
+    from pathlib import Path
+
+    try:
+        skill_md_path = (
+            Path(__file__).parent.parent / "skills" / "chatops-skill" / "SKILL.md"
+        )
+        if skill_md_path.exists():
+            with open(skill_md_path, encoding="utf-8") as f:
+                content = f.read()
+
+            tools_summary_idx = content.find("**Tools Summary:**")
+            if tools_summary_idx != -1:
+                return (
+                    "=== EXHAUSTIVE CHATOPS CAPABILITIES ===\n\n"
+                    + content[tools_summary_idx:]
+                )
+            return content
+
+        return "Error: Could not find SKILL.md documentation."
+    except Exception as e:
+        return f"Error reading ChatOps capabilities: {e}"

@@ -115,6 +115,7 @@ from soc_agent.tools.a2ui_renderer import render_dashboard  # noqa: E402
 from soc_agent.tools.chatops_tools import (  # noqa: E402
     deliver_report,
     generic_notification,
+    list_chatops_capabilities,
     notify_human_incident,
     request_human_confirmation,
     request_triage_approval,
@@ -985,6 +986,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
         request_triage_approval,
         deliver_report,
         generic_notification,
+        list_chatops_capabilities,
     ]
 
     # Chronicle for basic entity lookups
@@ -1102,7 +1104,6 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
     # ========================================================================
     logger.info("Creating main orchestrator agent...")
 
-    # Build orchestrator tools list
     orchestrator_tools = [
         fetch_full_document,
         save_report_artifact,
@@ -1113,6 +1114,7 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
         request_triage_approval,
         deliver_report,
         generic_notification,
+        list_chatops_capabilities,
         trigger_ai_brute_force_source_block_card,
         trigger_ai_canary_token_deployment_card,
         trigger_ai_compliance_violation_alert_card,
@@ -1206,6 +1208,7 @@ You have direct access to several tools and can delegate to specialized sub-agen
    - Retrieves historical context and tactical insights persisted from previous investigations.
 
 5. **ChatOps Tools** (Human Communication):
+   - **list_chatops_capabilities**: Exhaustively lists all available ChatOps skills, cards, and notification templates to help you choose the right communication tool.
    - **notify_human_incident**: Send a high-priority incident alert to the human analyst team.
    - **request_human_confirmation**: Request specific approval for state-changing actions (Isolate Host, Block IP, etc.).
    - **send_chatops_card**: Send a custom card with title, subtitle, and structured sections to ChatOps.
