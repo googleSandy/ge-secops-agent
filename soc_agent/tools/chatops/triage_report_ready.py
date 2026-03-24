@@ -4,6 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from google.cloud import storage
+from google.oauth2 import service_account
 
 from soc_agent.tools.chatops.card_client import generate_action_url, send_card
 
@@ -17,22 +18,38 @@ def get_presigned_url(case_id: str) -> str:
         return ""
 
     try:
-        client = storage.Client()
+        sa_path = os.environ.get("SECOPS_SA_PATH") or os.environ.get(
+            "CHRONICLE_SERVICE_ACCOUNT_PATH"
+        )
+        if sa_path and os.path.exists(sa_path):
+            credentials = service_account.Credentials.from_service_account_file(sa_path)
+            client = storage.Client(credentials=credentials)
+        else:
+            client = storage.Client()
+
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(f"archive/{case_id}_triage_report.pdf")
 
-        # Determine ambient service account automatically to authorize the signature
-        sa_email = client.get_service_account_email()
-        return blob.generate_signed_url(
-            version="v4",
-            expiration=datetime.timedelta(hours=24),
-            method="GET",
-            service_account_email=sa_email,
-        )
+        if sa_path and os.path.exists(sa_path):
+            # Key file is available, we can sign directly
+            return blob.generate_signed_url(
+                version="v4",
+                expiration=datetime.timedelta(hours=24),
+                method="GET",
+            )
+        else:
+            # Determine ambient service account automatically to authorize the signature
+            sa_email = client.get_service_account_email()
+            return blob.generate_signed_url(
+                version="v4",
+                expiration=datetime.timedelta(hours=24),
+                method="GET",
+                service_account_email=sa_email,
+            )
     except Exception as e:
         print(f"Failed to generate signed URL: {e}")
         # Secure fallback requiring user's own GCP auth
-        return f"https://console.cloud.google.com/storage/browser/_details/{bucket_name}/reports/{case_id}_triage_report.pdf"
+        return f"https://console.cloud.google.com/storage/browser/_details/{bucket_name}/archive/{case_id}_triage_report.pdf"
 
 
 def get_card(
