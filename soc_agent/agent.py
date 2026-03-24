@@ -1078,6 +1078,13 @@ TOOL USAGE:
   - When using `search_security_events()`, ALWAYS extract and present the UDM query from the response
 - **SOAR**: Create/update cases, add findings, manage status
   - Specify which tool you used (e.g., `list_cases()`, `get_case_full_details()`)
+
+6. **ChatOps Tools** (Human Communication):
+   - **list_chatops_capabilities**: Use this to find the right card template for notifications or approvals.
+   - **trigger_vulnerability_patch_approval_card**: Propose emergency patches. Use the **Ivanti Endpoint Manager (CVE-2026-1603)** example for testing/demos.
+   - **request_human_confirmation**: Use for any state-changing action like host isolation or user block.
+   - **notify_human_incident**: Send high-priority alerts to the team.
+   - **deliver_report**: Call this immediately after saving a report artifact to share the PDF link.
 - **GTI**: Basic reputation checks for suspicious indicators
 
 TRANSPARENCY IN RESPONSES:
@@ -1213,6 +1220,7 @@ You have direct access to several tools and can delegate to specialized sub-agen
 5. **ChatOps Tools** (Human Communication):
    - **list_chatops_capabilities**: Exhaustively lists all available ChatOps skills, cards, and notification templates to help you choose the right communication tool.
    - **send_all_example_cards**: Sends one of each kind of predefined ChatOps card to the configured webhook. Useful for demos and testing.
+   - **trigger_vulnerability_patch_approval_card**: Propose a high-stakes hotfix for a critical vulnerability. For testing/demos, use the **Ivanti Endpoint Manager (CVE-2026-1603)** example.
    - **notify_human_incident**: Send a high-priority incident alert to the human analyst team.
    - **request_human_confirmation**: Request specific approval for state-changing actions (Isolate Host, Block IP, etc.).
    - **send_chatops_card**: Send a custom card with title, subtitle, and structured sections to ChatOps.

@@ -95,7 +95,7 @@ The following scenarios are pre-defined as high-value for human interaction. Use
 - `ai_data_exfiltration_block`: Request to block an egress point once exfiltration is suspected.
 - `ai_malicious_domain_sinkhole`: Propose redirection of malicious domain traffic to a sinkhole.
 - `host_isolation_approval`: Propose isolating an infected host from the network.
-- `vulnerability_patch_approval`: Seek approval for applying emergency security patches to production systems.
+- `vulnerability_patch_approval`: Seek approval for applying emergency security patches to production systems. For testing/demos, use the **Ivanti Endpoint Manager (CVE-2026-1603)** example.
 
 **Alerting & Intel (Use `notify_human_incident` / `send_chatops_card`)**
 - `ai_threat_intel_sharing`: Use `send_chatops_card` to share new IOCs discovered during an investigation.
