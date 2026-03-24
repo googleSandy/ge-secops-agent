@@ -95,9 +95,9 @@ def get_card(
                                             {
                                                 "text": "Download Full PDF",
                                                 "color": {
-                                                    "red": 0,
+                                                    "red": 0.1,
                                                     "green": 0.4,
-                                                    "blue": 1.0,
+                                                    "blue": 0.8,
                                                 },
                                                 "onClick": {
                                                     "openLink": {"url": download_url}
