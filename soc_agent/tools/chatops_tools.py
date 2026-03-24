@@ -902,3 +902,40 @@ async def list_chatops_capabilities(ctx: Context | None = None) -> str:
         return "Error: Could not find SKILL.md documentation."
     except Exception as e:
         return f"Error reading ChatOps capabilities: {e}"
+
+
+async def send_all_example_cards(ctx: Context | None = None) -> str:
+    """
+    Sends one of each kind of predefined ChatOps card to the configured webhook.
+    This is useful for demos and quality control to visualize all available templates.
+    """
+    from pathlib import Path
+
+    cards_dir = Path(__file__).parent / "chatops"
+    sent_cards = []
+    errors = []
+
+    for py_file in cards_dir.glob("*.py"):
+        if py_file.name in [
+            "__init__.py",
+            "card_client.py",
+            "security.py",
+            "test_integration.py",
+            "test_security.py",
+            "webhook_handler.py",
+            "fix_legacy_templates.py",
+            "generate_test_url.py",
+        ]:
+            continue
+
+        template_name = py_file.stem
+        try:
+            await dispatch_card(template_name, ctx)
+            sent_cards.append(template_name)
+        except Exception as e:
+            errors.append(f"{template_name}: {e}")
+
+    result = f"Successfully sent {len(sent_cards)} example cards.\n"
+    if errors:
+        result += f"Errors encountered ({len(errors)}):\n" + "\n".join(errors)
+    return result

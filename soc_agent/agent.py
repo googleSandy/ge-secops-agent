@@ -119,6 +119,7 @@ from soc_agent.tools.chatops_tools import (  # noqa: E402
     notify_human_incident,
     request_human_confirmation,
     request_triage_approval,
+    send_all_example_cards,
     send_chatops_card,
     trigger_ai_brute_force_source_block_card,
     trigger_ai_canary_token_deployment_card,
@@ -987,6 +988,7 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
         deliver_report,
         generic_notification,
         list_chatops_capabilities,
+        send_all_example_cards,
     ]
 
     # Chronicle for basic entity lookups
@@ -1115,6 +1117,7 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
         deliver_report,
         generic_notification,
         list_chatops_capabilities,
+        send_all_example_cards,
         trigger_ai_brute_force_source_block_card,
         trigger_ai_canary_token_deployment_card,
         trigger_ai_compliance_violation_alert_card,
@@ -1209,6 +1212,7 @@ You have direct access to several tools and can delegate to specialized sub-agen
 
 5. **ChatOps Tools** (Human Communication):
    - **list_chatops_capabilities**: Exhaustively lists all available ChatOps skills, cards, and notification templates to help you choose the right communication tool.
+   - **send_all_example_cards**: Sends one of each kind of predefined ChatOps card to the configured webhook. Useful for demos and testing.
    - **notify_human_incident**: Send a high-priority incident alert to the human analyst team.
    - **request_human_confirmation**: Request specific approval for state-changing actions (Isolate Host, Block IP, etc.).
    - **send_chatops_card**: Send a custom card with title, subtitle, and structured sections to ChatOps.
