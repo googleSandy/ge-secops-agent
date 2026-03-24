@@ -30,8 +30,10 @@ def get_presigned_url(case_id: str) -> str:
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(f"archive/{case_id}_triage_report.pdf")
 
-        # Fallback to demo PDF if the requested one doesn't exist
-        if not blob.exists():
+        # Fallback to demo PDF only if testing (not in production)
+        if not blob.exists() and (
+            "TEST" in case_id.upper() or "DEMO" in case_id.upper()
+        ):
             print(
                 f"Report for {case_id} not found. Falling back to demo INC-2024 report."
             )
