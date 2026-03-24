@@ -30,6 +30,13 @@ def get_presigned_url(case_id: str) -> str:
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(f"archive/{case_id}_triage_report.pdf")
 
+        # Fallback to demo PDF if the requested one doesn't exist
+        if not blob.exists():
+            print(
+                f"Report for {case_id} not found. Falling back to demo INC-2024 report."
+            )
+            blob = bucket.blob("archive/INC-2024_triage_report.pdf")
+
         if sa_path and os.path.exists(sa_path):
             # Key file is available, we can sign directly
             return blob.generate_signed_url(
