@@ -915,6 +915,7 @@ async def send_all_example_cards(ctx: Context) -> str:
     Sends one of each kind of predefined ChatOps card to the configured webhook.
     This is useful for demos and quality control to visualize all available templates.
     """
+    import asyncio
     from pathlib import Path
 
     cards_dir = Path(__file__).parent / "chatops"
@@ -936,8 +937,14 @@ async def send_all_example_cards(ctx: Context) -> str:
 
         template_name = py_file.stem
         try:
-            await dispatch_card(template_name, ctx)
-            sent_cards.append(template_name)
+            response = await dispatch_card(template_name, ctx)
+            if response.startswith("Error"):
+                errors.append(f"{template_name}: {response}")
+            else:
+                sent_cards.append(template_name)
+
+            # Google Chat Webhooks are strictly limited to 1 request per second
+            await asyncio.sleep(1.5)
         except Exception as e:
             errors.append(f"{template_name}: {e}")
 
