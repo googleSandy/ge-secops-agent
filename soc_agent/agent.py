@@ -113,13 +113,12 @@ from mcp import StdioServerParameters  # noqa: E402
 
 from soc_agent.tools.a2ui_renderer import render_dashboard  # noqa: E402
 from soc_agent.tools.chatops_tools import (  # noqa: E402
-    notify_human_incident,
-    request_human_confirmation,
-    send_chatops_card,
-    verify_user_travel,
-    request_triage_approval,
     deliver_report,
     generic_notification,
+    notify_human_incident,
+    request_human_confirmation,
+    request_triage_approval,
+    send_chatops_card,
     trigger_ai_brute_force_source_block_card,
     trigger_ai_canary_token_deployment_card,
     trigger_ai_compliance_violation_alert_card,
@@ -163,6 +162,7 @@ from soc_agent.tools.chatops_tools import (  # noqa: E402
     trigger_shadow_it_discovery_card,
     trigger_temp_admin_request_card,
     trigger_vulnerability_patch_approval_card,
+    verify_user_travel,
 )
 
 
@@ -536,12 +536,115 @@ async def before_tool_cache(tool, args, tool_context: Context, **kwargs):
     return None  # Proceed to actual tool execution
 
 
+def compress_vt_report_data(raw_data):
+    """Compresses VirusTotal report data to reduce context size."""
+    try:
+        if isinstance(raw_data, str):
+            try:
+                raw_data = json.loads(raw_data)
+            except json.JSONDecodeError:
+                return raw_data  # Not JSON, return as is
+
+        if not isinstance(raw_data, dict):
+            return raw_data
+
+        data = raw_data.get("data", raw_data)
+        if not isinstance(data, dict):
+            return raw_data
+
+        attributes = data.get("attributes", data)
+        if not isinstance(attributes, dict):
+            return raw_data
+
+        compressed_report = {
+            "id": data.get("id"),
+            "hashes": {
+                "sha256": attributes.get("sha256"),
+                "md5": attributes.get("md5"),
+                "sha1": attributes.get("sha1"),
+            },
+            "names": attributes.get("names", [])[:5],
+            "file_type": attributes.get("type_description"),
+            "tags": attributes.get("tags", []),
+            "analysis_stats": attributes.get("last_analysis_stats", {}),
+            "threat_classification": attributes.get(
+                "popular_threat_classification", {}
+            ).get("suggested_threat_label", "Unknown"),
+            "threat_severity": attributes.get("threat_severity", {}).get(
+                "threat_severity_level", "Unknown"
+            ),
+            "severity_description": attributes.get("threat_severity", {}).get(
+                "level_description", ""
+            ),
+        }
+
+        sigma = attributes.get("sigma_analysis_results", [])
+        if sigma:
+            if isinstance(sigma[0], dict):
+                compressed_report["sigma_rules"] = [
+                    r.get("rule_title") for r in sigma if "rule_title" in r
+                ]
+            else:
+                compressed_report["sigma_rules"] = sigma
+
+        yara = attributes.get("crowdsourced_yara_results", [])
+        if yara:
+            compressed_report["yara_rules"] = [
+                r.get("rule_name") for r in yara if "rule_name" in r
+            ]
+
+        final_report = {}
+        for k, v in compressed_report.items():
+            if v and v != "Unknown":
+                if isinstance(v, dict):
+                    clean_dict = {dk: dv for dk, dv in v.items() if dv is not None}
+                    if clean_dict:
+                        final_report[k] = clean_dict
+                elif isinstance(v, list) and not v:
+                    pass
+                else:
+                    final_report[k] = v
+
+        return final_report
+    except Exception as e:
+        logger.error(f"Failed to compress VT report data: {e}", exc_info=True)
+        return raw_data
+
+
 async def after_tool_cache(tool, args, tool_context: Context, tool_response, **kwargs):
     """
     Caches the tool result and triggers immediate memory sync.
     This ensures the Vertex AI Memory Bank is updated in real-time during investigations.
     """
     try:
+        # Compress GTI get_file_report responses to save context window
+        if tool.name == "get_file_report":
+            try:
+                if hasattr(tool_response, "content") and isinstance(
+                    tool_response.content, list
+                ):
+                    for content_item in tool_response.content:
+                        if hasattr(content_item, "text"):
+                            compressed = compress_vt_report_data(content_item.text)
+                            content_item.text = (
+                                json.dumps(compressed)
+                                if isinstance(compressed, dict)
+                                else compressed
+                            )
+                elif isinstance(tool_response, str):
+                    compressed = compress_vt_report_data(tool_response)
+                    tool_response = (
+                        json.dumps(compressed)
+                        if isinstance(compressed, dict)
+                        else compressed
+                    )
+                elif isinstance(tool_response, dict):
+                    tool_response = compress_vt_report_data(tool_response)
+            except Exception as e:
+                logger.error(
+                    f"Error compressing get_file_report data: {e}", exc_info=True
+                )
+
         # Save to cache
         cache_key = f"{tool.name}:{json.dumps(args, sort_keys=True)}"
         if "tool_result_cache" not in tool_context.state:
