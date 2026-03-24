@@ -75,16 +75,20 @@ The following scenarios are pre-defined as high-value for human interaction. Use
 
 **Access & Identity (Use `request_human_confirmation`)**
 - `ai_credential_reset_approval`: Request approval before forcing a password reset on a high-value account.
+- `ai_privilege_access_v2`: Propose and approve privilege access requests using the newer V2 card format.
 - `ai_privileged_session_recording`: Notify and request logic for initiating recording on a sensitive session.
 - `ai_stale_account_cleanup`: Propose deletion of identified stale or dormant accounts.
 - `ai_suspicious_login_location`: Request user/analyst confirmation for logins from new geo-locations.
 - `ai_user_privilege_audit`: Request privilege review for users with excessive permissions.
+- `impossible_travel_verification`: Request verification from the affected user regarding an impossible travel event.
 - `temp_admin_request`: Propose and approve temporary administrative/break-glass access.
 - `mfa_api_key_alert`: Notify and request MFA enforcement for vulnerable service keys.
 - `ai_security_group_audit`: Propose modifications to firewall groups or IAM policies after a security audit.
 
 **Containment & Remediation (Use `request_human_confirmation`)**
 - `ai_brute_force_source_block`: Request approval to block an IP address at the firewall after brute force detection.
+- `ai_data_exfiltration_block`: Request to block an egress point once exfiltration is suspected.
+- `ai_firewall_bypass_request`: Request approval for a temporary firewall bypass rule.
 - `ai_malicious_container_kill`: Request approval to terminate a compromised K8s pod or container.
 - `ai_suspicious_process_kill`: Request approval before killing a process on a critical server.
 - `ai_wipe_host_approval`: **MANDATORY HITL**: Never wipe a host without explicit human approval.
@@ -99,6 +103,8 @@ The following scenarios are pre-defined as high-value for human interaction. Use
 - `ai_dns_exfiltration_detection`: Notify humans of anomalous DNS patterns indicative of tunneling.
 - `ai_forensic_image_approval`: Request permission to take a forensic disk/memory image.
 - `ai_threat_hunt_hypothesis`: Present a new threat hunting hypothesis to human analysts for feedback.
+- `brute_force_alert`: Notification to the team of a detected brute force attack.
+- `impossible_travel_alert`: Notification of a potential impossible travel login event.
 - `ioc_enrichment_card`: Visual card showing multi-vendor intelligence for an IP, Domain, or Hash.
 - `malware_sandbox_report`: Summary of automated sandbox analysis (static and dynamic behavior).
 - `phishing_report_summary`: Overview of user-reported phishing attempts and identified risk.
@@ -111,8 +117,11 @@ The following scenarios are pre-defined as high-value for human interaction. Use
 - `ai_incident_summary_confirm`: Request a human to review your final incident summary before closure.
 - `ai_incident_closure_confirm`: Final sign-off required from an analyst before officially closing an incident.
 - `ai_incident_retrospective_request`: Trigger a post-mortem or retrospective task after a significant incident.
+- `ai_network_scan_approval`: Request approval before initiating an active network vulnerability scan.
+- `ai_sensitive_log_access`: Request approval for a security analyst to access highly sensitive logs.
 - `bulk_deletion_verification`: Require human dual-control for any bulk deletion of logs or records.
 - `ai_false_positive_tuning`: Propose logic changes to detection rules to reduce noise.
 - `ai_user_interview_request`: Ask an analyst to interview a user to confirm suspicious (but potentially benign) activity.
 - `ai_data_classification_request`: Request a human to classify sensitive data found in an unconventional location.
 - `ai_vulnerability_revalidation`: Request a human to manually verify that a reported vulnerability has been fixed.
+- `forensics_evidence_ready`: Notify the team that requested forensic evidence collection has finished.
