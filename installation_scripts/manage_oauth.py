@@ -62,6 +62,10 @@ class OAuthManager:
             with open(self.env_file) as f:
                 lines = f.readlines()
 
+            # Ensure the last line has a newline to prevent concatenation
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+
         # Find existing key or add new one
         key_found = False
         for i, line in enumerate(lines):
