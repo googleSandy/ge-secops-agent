@@ -908,8 +908,8 @@ class AgentEngineManager:
                 "description": description,
                 "requirements": [
                     "cloudpickle",
-                    "google-adk>=1.27.0",
-                    "google-cloud-aiplatform[agent-engines]~=1.140.0",
+                    "google-adk~=1.28.0",
+                    "google-cloud-aiplatform[agent-engines,evaluation]~=1.144.0",
                     "pydantic",
                     "python-dotenv",
                     "httpx>=0.28.1",
@@ -1578,6 +1578,12 @@ def deploy(
     no_test: Annotated[
         bool, typer.Option("--no-test", help="Skip automatic test after creation")
     ] = False,
+    description: Annotated[
+        str | None,
+        typer.Option(
+            "--description", "-d", help="Description for the deployed agent engine"
+        ),
+    ] = None,
     env_file: Annotated[
         Path, typer.Option(help="Path to the environment file.")
     ] = Path(".env"),
@@ -1620,7 +1626,9 @@ def deploy(
 
     # Create the new agent
     typer.echo("\n--- Phase 1: Building New Engine ---")
-    resource_name = manager.create_agent(agent_module, debug, no_test)
+    resource_name = manager.create_agent(
+        agent_module, debug, no_test, description=description
+    )
 
     if resource_name:
         typer.echo("\n--- Phase 2: Updating Environment ---")
