@@ -370,8 +370,9 @@ async def before_tool_cache(tool, args, tool_context: Context, **kwargs):
 
 async def after_tool_cache(tool, args, tool_context: Context, tool_response, **kwargs):
     """
-    Caches the tool result and triggers immediate memory sync.
-    This ensures the Vertex AI Memory Bank is updated in real-time during investigations.
+    Caches the tool result for deduplication within the same session.
+    Memory generation is handled by after_agent_callback (generate_memory)
+    at the end of each agent turn — not per tool call.
     """
     try:
         # Save to cache
@@ -382,12 +383,8 @@ async def after_tool_cache(tool, args, tool_context: Context, tool_response, **k
         tool_context.state["tool_result_cache"][cache_key] = tool_response
         logger.info(f"CACHE_SAVE: Cached result for tool '{tool.name}'")
 
-        # Trigger immediate memory generation (Save to Vertex AI Memory Bank)
-        # This keeps the memory bank up-to-date even during long agent turns
-        await generate_memory(ctx=tool_context)
-
     except Exception as e:
-        logger.warning(f"CACHE_ERROR: Failed to update tool cache or memory: {e}")
+        logger.warning(f"CACHE_ERROR: Failed to update tool cache: {e}")
 
     return tool_response  # Return result to the model
 
