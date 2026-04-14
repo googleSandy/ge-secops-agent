@@ -524,7 +524,7 @@ endif
 		--project=$(GCP_PROJECT_ID) \
 		--format="table(timestamp,severity,textPayload)" \
 		--freshness=10m \
-		--order=desc
+		--order=asc
 
 agentspace-redeploy: agentspace-update ## Update AgentSpace configuration
 	@echo "AgentSpace configuration update completed successfully!"
