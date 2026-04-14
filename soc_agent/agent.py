@@ -98,6 +98,7 @@ im_session.InMemorySessionService.append_event = _patched_append_event
 
 
 from google.adk.tools.load_memory_tool import LoadMemoryTool  # noqa: E402
+from google.adk.tools.preload_memory_tool import PreloadMemoryTool  # noqa: E402
 from google.adk.tools.mcp_tool.mcp_session_manager import (  # noqa: E402
     StdioConnectionParams,  # noqa: E402
 )
@@ -172,6 +173,95 @@ from soc_agent.tools.chatops_tools import (  # noqa: E402
 # The Vertex AI telemetry/instrumentation sometimes searches for '.version' on models/tools
 Agent.version = "1.0"
 AgentTool.version = "1.0"
+
+
+# -------------------------------------------------------------------------
+# Shared-Scope PreloadMemoryTool
+# -------------------------------------------------------------------------
+# PreloadMemoryTool uses process_llm_request() which bypasses
+# before_tool_callback, so the monkey-patch in before_tool_cache that
+# forces user_id="global_soc_team" does NOT apply.
+# This subclass overrides process_llm_request to call the memory service
+# directly with the shared team scope.
+class SharedScopePreloadMemoryTool(PreloadMemoryTool):
+    """PreloadMemoryTool that always searches under the shared team scope.
+
+    The default PreloadMemoryTool uses the per-user scope from the
+    invocation context. This subclass overrides the memory search to
+    use user_id='global_soc_team' so that all analysts share the same
+    memory bank.
+    """
+
+    SHARED_USER_ID = "global_soc_team"
+
+    async def process_llm_request(
+        self, *, tool_context, llm_request
+    ) -> None:
+        from google.adk.tools import _memory_entry_utils
+
+        user_content = tool_context.user_content
+        if (
+            not user_content
+            or not user_content.parts
+            or not user_content.parts[0].text
+        ):
+            return
+
+        user_query = user_content.parts[0].text
+        try:
+            # Bypass tool_context.search_memory (which uses per-user scope)
+            # and call the memory service directly with the shared team scope.
+            memory_service = getattr(
+                tool_context._invocation_context, "memory_service", None
+            )
+            if not memory_service:
+                logger.warning(
+                    "PRELOAD_MEMORY: No memory service available, skipping."
+                )
+                return
+
+            response = await memory_service.search_memory(
+                app_name=tool_context._invocation_context.app_name,
+                user_id=self.SHARED_USER_ID,
+                query=user_query,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to preload shared-scope memory for query: %s",
+                user_query,
+            )
+            return
+
+        if not response.memories:
+            return
+
+        memory_text_lines = []
+        for memory in response.memories:
+            if time_str := (
+                f"Time: {memory.timestamp}" if memory.timestamp else ""
+            ):
+                memory_text_lines.append(time_str)
+            if memory_text := _memory_entry_utils.extract_text(memory):
+                memory_text_lines.append(
+                    f"{memory.author}: {memory_text}"
+                    if memory.author
+                    else memory_text
+                )
+        if not memory_text_lines:
+            return
+
+        full_memory_text = "\n".join(memory_text_lines)
+        si = f"""The following content is from your team's previous investigations and conversations.
+They may be useful for answering the user's current query.
+<PAST_CONVERSATIONS>
+{full_memory_text}
+</PAST_CONVERSATIONS>
+"""
+        llm_request.append_instructions([si])
+        logger.info(
+            "PRELOAD_MEMORY: Injected %d memory entries into system instruction.",
+            len(memory_text_lines),
+        )
 
 
 # Explicitly disable the automatic execution loop
@@ -504,7 +594,10 @@ async def before_tool_cache(tool, args, tool_context: Context, **kwargs):
     try:
         # SHARED MEMORY SCOPE OVERRIDE
         # Override the search_memory method on this specific context instance
-        # to force LoadMemoryTool to retrieve from the global team scope.
+        # to force LoadMemoryTool (on-demand) to retrieve from the global team scope.
+        # NOTE: PreloadMemoryTool bypasses before_tool_callback entirely
+        # (it uses process_llm_request), so SharedScopePreloadMemoryTool
+        # handles the shared scope directly in its override.
         if (
             tool.name == "load_memory"
             and hasattr(tool_context, "_invocation_context")
@@ -615,8 +708,9 @@ def compress_vt_report_data(raw_data):
 
 async def after_tool_cache(tool, args, tool_context: Context, tool_response, **kwargs):
     """
-    Caches the tool result and triggers immediate memory sync.
-    This ensures the Vertex AI Memory Bank is updated in real-time during investigations.
+    Caches the tool result for deduplication within the same session.
+    Memory generation is handled by after_agent_callback (generate_memory)
+    at the end of each agent turn — not per tool call.
     """
     try:
         # Compress GTI get_file_report responses to save context window
@@ -655,12 +749,8 @@ async def after_tool_cache(tool, args, tool_context: Context, tool_response, **k
         tool_context.state["tool_result_cache"][cache_key] = tool_response
         logger.info(f"CACHE_SAVE: Cached result for tool '{tool.name}'")
 
-        # Trigger immediate memory generation (Save to Vertex AI Memory Bank)
-        # This keeps the memory bank up-to-date even during long agent turns
-        await generate_memory(ctx=tool_context)
-
     except Exception as e:
-        logger.warning(f"CACHE_ERROR: Failed to update tool cache or memory: {e}")
+        logger.warning(f"CACHE_ERROR: Failed to update tool cache: {e}")
 
     return tool_response  # Return result to the model
 
@@ -852,7 +942,12 @@ def create_agent():
         skills=[malware_triage_skill, chatops_skill]
     )
 
-    cti_tools = [save_report_artifact, cti_skill_toolset, LoadMemoryTool()]
+    cti_tools = [
+        save_report_artifact,
+        cti_skill_toolset,
+        SharedScopePreloadMemoryTool(),  # Auto-load memories at start of every turn
+        LoadMemoryTool(),  # On-demand memory queries during investigation
+    ]
 
     # GTI tools for threat intelligence
     cti_tools.append(
@@ -979,7 +1074,8 @@ CRITICAL: When formulating analysis plans, summarize your approach and ask for u
     tier1_tools = [
         save_report_artifact,
         tier1_skill_toolset,
-        LoadMemoryTool(),
+        SharedScopePreloadMemoryTool(),  # Auto-load memories at start of every turn
+        LoadMemoryTool(),  # On-demand memory queries during investigation
         notify_human_incident,
         request_human_confirmation,
         send_chatops_card,
@@ -1185,8 +1281,9 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
             )
         )
 
-    # Add Memory Search tool
-    orchestrator_tools.append(LoadMemoryTool())
+    # Add Memory tools — PreloadMemory for automatic context, LoadMemory for on-demand queries
+    orchestrator_tools.append(SharedScopePreloadMemoryTool())  # Auto-load at start of every turn
+    orchestrator_tools.append(LoadMemoryTool())  # On-demand memory queries
 
     # Build orchestrator instruction
     orchestrator_instruction = """You are the SecOps Security Agent orchestrator for Google SecOps - a sophisticated coordinator that intelligently delegates security operations to specialized persona-based agents and retrieves knowledge base documentation.
