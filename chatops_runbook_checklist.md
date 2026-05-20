@@ -1,0 +1,47 @@
+# Pending ChatOps Skills Conversions
+
+These templates need explicit `@tool` wrappers inside `chatops_tools.py`:
+
+- [ ] `ai_brute_force_source_block.py`
+- [ ] `ai_canary_token_deployment.py`
+- [ ] `ai_compliance_violation_alert.py`
+- [ ] `ai_credential_reset_approval.py`
+- [ ] `ai_data_classification_request.py`
+- [ ] `ai_data_exfiltration_block.py`
+- [ ] `ai_dns_exfiltration_detection.py`
+- [ ] `ai_draft_comms_review.py`
+- [ ] `ai_false_positive_tuning.py`
+- [ ] `ai_firewall_bypass_request.py`
+- [ ] `ai_forensic_image_approval.py`
+- [ ] `ai_incident_closure_confirm.py`
+- [ ] `ai_incident_retrospective_request.py`
+- [ ] `ai_incident_summary_confirm.py`
+- [ ] `ai_malicious_container_kill.py`
+- [ ] `ai_malicious_domain_sinkhole.py`
+- [ ] `ai_network_scan_approval.py`
+- [ ] `ai_playbook_selection.py`
+- [ ] `ai_privilege_access_v2.py`
+- [ ] `ai_privileged_session_recording.py`
+- [ ] `ai_security_group_audit.py`
+- [ ] `ai_sensitive_log_access.py`
+- [ ] `ai_stale_account_cleanup.py`
+- [ ] `ai_suspicious_login_location.py`
+- [ ] `ai_suspicious_process_kill.py`
+- [ ] `ai_threat_hunt_hypothesis.py`
+- [ ] `ai_threat_intel_sharing.py`
+- [ ] `ai_user_interview_request.py`
+- [ ] `ai_user_privilege_audit.py`
+- [ ] `ai_vulnerability_revalidation.py`
+- [ ] `ai_wipe_host_approval.py`
+- [ ] `brute_force_alert.py`
+- [ ] `bulk_deletion_verification.py`
+- [ ] `forensics_evidence_ready.py`
+- [ ] `impossible_travel_alert.py`
+- [ ] `impossible_travel_verification.py`
+- [ ] `ioc_enrichment_card.py`
+- [ ] `malware_sandbox_report.py`
+- [ ] `mfa_api_key_alert.py`
+- [ ] `phishing_report_summary.py`
+- [ ] `shadow_it_discovery.py`
+- [ ] `temp_admin_request.py`
+- [ ] `vulnerability_patch_approval.py`
