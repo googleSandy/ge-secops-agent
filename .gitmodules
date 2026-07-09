@@ -8,3 +8,6 @@
 [submodule "adk_runbooks"]
 	path = adk_runbooks
 	url = https://github.com/dandye/adk_runbooks.git
+[submodule "A2UI"]
+	path = A2UI
+	url = https://github.com/google/A2UI.git

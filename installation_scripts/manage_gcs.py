@@ -19,6 +19,10 @@ from google.cloud import storage
 from google.cloud.exceptions import Conflict, NotFound
 
 
+# Add text/markdown mimetype for .md files
+mimetypes.add_type("text/markdown", ".md")
+
+
 app = typer.Typer(
     add_completion=False,
     help="Manage Google Cloud Storage for RAG corpus imports.",

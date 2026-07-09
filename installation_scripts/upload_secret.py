@@ -8,13 +8,13 @@ for secure access by the deployed agent.
 
 import json
 import os
-import sys
 from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
-from google.cloud import secretmanager
 from google.api_core import exceptions
+from google.cloud import secretmanager
+
 
 app = typer.Typer(add_completion=False)
 
@@ -24,7 +24,7 @@ def create_or_update_secret(
     secret_id: str,
     secret_data: str,
     force: bool = False,
-    credentials_path: Path = None
+    credentials_path: Path = None,
 ) -> str:
     """
     Create or update a secret in Secret Manager.
@@ -42,6 +42,7 @@ def create_or_update_secret(
     # Initialize client with credentials if provided
     if credentials_path:
         from google.oauth2 import service_account
+
         credentials = service_account.Credentials.from_service_account_file(
             str(credentials_path)
         )
@@ -64,7 +65,7 @@ def create_or_update_secret(
         if not force:
             typer.secho(
                 f"⚠️  Secret '{secret_id}' already exists in project '{project_id}'",
-                fg=typer.colors.YELLOW
+                fg=typer.colors.YELLOW,
             )
             if not typer.confirm("Do you want to add a new version?", default=True):
                 typer.secho("Cancelled.", fg=typer.colors.YELLOW)
@@ -101,29 +102,23 @@ def create_or_update_secret(
 
 @app.command()
 def upload(
-    env_file: Path = typer.Option(
-        Path(".env"),
-        "--env-file",
-        "-e",
-        help="Path to .env file"
+    env_file: Path = typer.Option(  # noqa: B008
+        Path(".env"), "--env-file", "-e", help="Path to .env file"
     ),
-    secret_id: str = typer.Option(
+    secret_id: str = typer.Option(  # noqa: B008
         "chronicle-service-account",
         "--secret-id",
         "-s",
-        help="Secret ID in Secret Manager"
+        help="Secret ID in Secret Manager",
     ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        "-f",
-        help="Skip confirmation prompts"
+    force: bool = typer.Option(  # noqa: B008
+        False, "--force", "-f", help="Skip confirmation prompts"
     ),
-    credentials: Path = typer.Option(
+    credentials: Path = typer.Option(  # noqa: B008
         None,
         "--credentials",
         "-c",
-        help="Path to service account key file for authentication (if different from ADC)"
+        help="Path to service account key file for authentication (if different from ADC)",
     ),
 ):
     """
@@ -133,7 +128,9 @@ def upload(
     the JSON file to Google Secret Manager for secure access.
     """
     typer.echo("\n" + "=" * 80)
-    typer.secho("Upload Service Account to Secret Manager", fg=typer.colors.BLUE, bold=True)
+    typer.secho(
+        "Upload Service Account to Secret Manager", fg=typer.colors.BLUE, bold=True
+    )
     typer.echo("=" * 80 + "\n")
 
     # Load environment variables
@@ -152,7 +149,9 @@ def upload(
         raise typer.Exit(1)
 
     if not sa_path:
-        typer.secho("✗ CHRONICLE_SERVICE_ACCOUNT_PATH not set in .env", fg=typer.colors.RED)
+        typer.secho(
+            "✗ CHRONICLE_SERVICE_ACCOUNT_PATH not set in .env", fg=typer.colors.RED
+        )
         raise typer.Exit(1)
 
     sa_file = Path(sa_path)
@@ -163,18 +162,21 @@ def upload(
     # Read and validate service account JSON
     typer.echo(f"Reading service account file: {sa_file}")
     try:
-        with open(sa_file, 'r') as f:
+        with open(sa_file) as f:
             sa_data = json.load(f)
 
         # Validate it's a service account JSON
         if "type" not in sa_data or sa_data["type"] != "service_account":
-            typer.secho("✗ File does not appear to be a service account JSON", fg=typer.colors.RED)
+            typer.secho(
+                "✗ File does not appear to be a service account JSON",
+                fg=typer.colors.RED,
+            )
             raise typer.Exit(1)
 
         # Convert back to string for storage
         sa_json_str = json.dumps(sa_data)
 
-        typer.secho(f"✓ Valid service account JSON", fg=typer.colors.GREEN)
+        typer.secho("✓ Valid service account JSON", fg=typer.colors.GREEN)
         typer.echo(f"  Project: {sa_data.get('project_id', 'N/A')}")
         typer.echo(f"  Client Email: {sa_data.get('client_email', 'N/A')}")
 
@@ -188,19 +190,19 @@ def upload(
         raise typer.Exit(1)
 
     # Upload to Secret Manager
-    typer.echo(f"\nUploading to Secret Manager...")
+    typer.echo("\nUploading to Secret Manager...")
     typer.echo(f"  Project: {project_id}")
     typer.echo(f"  Secret ID: {secret_id}")
     if credentials:
         typer.echo(f"  Using credentials: {credentials}")
 
     try:
-        version_name = create_or_update_secret(
+        create_or_update_secret(
             project_id=project_id,
             secret_id=secret_id,
             secret_data=sa_json_str,
             force=force,
-            credentials_path=credentials
+            credentials_path=credentials,
         )
 
         typer.echo("\n" + "=" * 80)
@@ -212,7 +214,10 @@ def upload(
         typer.secho("Next Steps:", fg=typer.colors.YELLOW, bold=True)
         typer.echo("Add this to your .env file:")
         typer.echo()
-        typer.secho(f'CHRONICLE_SERVICE_ACCOUNT_SECRET="{secret_resource}"', fg=typer.colors.CYAN)
+        typer.secho(
+            f'CHRONICLE_SERVICE_ACCOUNT_SECRET="{secret_resource}"',
+            fg=typer.colors.CYAN,
+        )
         typer.echo()
         typer.echo("The deployment script will automatically use Secret Manager")
         typer.echo("when CHRONICLE_SERVICE_ACCOUNT_SECRET is set.")
@@ -225,23 +230,20 @@ def upload(
 
 @app.command()
 def verify(
-    env_file: Path = typer.Option(
-        Path(".env"),
-        "--env-file",
-        "-e",
-        help="Path to .env file"
+    env_file: Path = typer.Option(  # noqa: B008
+        Path(".env"), "--env-file", "-e", help="Path to .env file"
     ),
-    secret_id: str = typer.Option(
+    secret_id: str = typer.Option(  # noqa: B008
         "chronicle-service-account",
         "--secret-id",
         "-s",
-        help="Secret ID in Secret Manager"
+        help="Secret ID in Secret Manager",
     ),
-    credentials: Path = typer.Option(
+    credentials: Path = typer.Option(  # noqa: B008
         None,
         "--credentials",
         "-c",
-        help="Path to service account key file for authentication (if different from ADC)"
+        help="Path to service account key file for authentication (if different from ADC)",
     ),
 ):
     """
@@ -266,6 +268,7 @@ def verify(
     # Initialize client with credentials if provided
     if credentials:
         from google.oauth2 import service_account
+
         creds = service_account.Credentials.from_service_account_file(str(credentials))
         client = secretmanager.SecretManagerServiceClient(credentials=creds)
         typer.echo(f"Using credentials from: {credentials}")
@@ -292,8 +295,10 @@ def verify(
         typer.secho(f"✗ Secret not found: {secret_name}", fg=typer.colors.RED)
         raise typer.Exit(1)
     except exceptions.PermissionDenied:
-        typer.secho(f"✗ Permission denied accessing secret", fg=typer.colors.RED)
-        typer.echo("  Ensure your credentials have 'secretmanager.versions.access' permission")
+        typer.secho("✗ Permission denied accessing secret", fg=typer.colors.RED)
+        typer.echo(
+            "  Ensure your credentials have 'secretmanager.versions.access' permission"
+        )
         raise typer.Exit(1)
     except Exception as e:
         typer.secho(f"✗ Error accessing secret: {e}", fg=typer.colors.RED)

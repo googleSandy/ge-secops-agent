@@ -13,7 +13,7 @@ If successful, this avoids the need for a 16-agent architecture.
 """
 
 import sys
-from typing import Any, Dict
+from typing import Any
 
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
@@ -43,26 +43,22 @@ class CTISecurityFacade:
         self._gti_toolset = McpToolset(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
-                    command=sys.executable,
-                    args=["-m", "gti_mcp.server"],
-                    env={}
+                    command=sys.executable, args=["-m", "gti_mcp.server"], env={}
                 ),
-                timeout=120000
+                timeout=120000,
             ),
-            errlog=None
+            errlog=None,
         )
 
         # Chronicle SIEM toolset
         self._chronicle_toolset = McpToolset(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
-                    command=sys.executable,
-                    args=["-m", "secops_mcp.server"],
-                    env={}
+                    command=sys.executable, args=["-m", "secops_mcp.server"], env={}
                 ),
-                timeout=120000
+                timeout=120000,
             ),
-            errlog=None
+            errlog=None,
         )
 
         # SOAR toolset
@@ -71,45 +67,43 @@ class CTISecurityFacade:
                 server_params=StdioServerParameters(
                     command=sys.executable,
                     args=["-m", "secops_soar_mcp.server"],
-                    env={}
+                    env={},
                 ),
-                timeout=120000
+                timeout=120000,
             ),
-            errlog=None
+            errlog=None,
         )
 
         # SCC toolset
         self._scc_toolset = McpToolset(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
-                    command=sys.executable,
-                    args=["-m", "scc_mcp"],
-                    env={}
+                    command=sys.executable, args=["-m", "scc_mcp"], env={}
                 ),
-                timeout=120000
+                timeout=120000,
             ),
-            errlog=None
+            errlog=None,
         )
 
     # NOTE: The methods below show the INTENT, but McpToolset doesn't have
     # a simple `invoke` or `call` method we can use programmatically.
     # McpToolsets are integrated into the Agent framework's tool invocation system.
 
-    def query_gti(self, query: str) -> Dict[str, Any]:
+    def query_gti(self, query: str) -> dict[str, Any]:
         """Query Google Threat Intelligence for threat data."""
         # TODO: How to invoke McpToolset functions programmatically?
         # McpToolset is designed to be called by the Agent framework, not directly
         raise NotImplementedError("Need to determine McpToolset invocation API")
 
-    def query_chronicle(self, query: str) -> Dict[str, Any]:
+    def query_chronicle(self, query: str) -> dict[str, Any]:
         """Query Chronicle SIEM for security events."""
         raise NotImplementedError("Need to determine McpToolset invocation API")
 
-    def query_soar(self, operation: str, **kwargs) -> Dict[str, Any]:
+    def query_soar(self, operation: str, **kwargs) -> dict[str, Any]:
         """Interact with SOAR platform for case management."""
         raise NotImplementedError("Need to determine McpToolset invocation API")
 
-    def query_scc(self, operation: str, **kwargs) -> Dict[str, Any]:
+    def query_scc(self, operation: str, **kwargs) -> dict[str, Any]:
         """Query Security Command Center for findings."""
         raise NotImplementedError("Need to determine McpToolset invocation API")
 

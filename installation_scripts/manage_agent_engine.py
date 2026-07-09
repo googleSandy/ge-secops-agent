@@ -12,7 +12,7 @@ import logging
 import os
 import re
 import sys
-import typing
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -27,11 +27,11 @@ from google.cloud.aiplatform_v1beta1 import (
     ListReasoningEnginesRequest,
     ReasoningEngineServiceClient,
 )
+from vertexai import agent_engines
+from vertexai.preview.reasoning_engines import AdkApp
 
 # Added AgentSpaceManager for synchronized UI purges
 from installation_scripts.manage_agentspace import AgentSpaceManager
-from vertexai import agent_engines
-from vertexai.preview.reasoning_engines import AdkApp
 
 
 # Import Discovery Engine client for Agent Builder assistants
@@ -532,6 +532,41 @@ class AgentEngineManager:
         agent_module: str = "soc_agent",
         debug: bool = False,
         no_test: bool = False,
+        description: str | None = None,
+    ) -> str | None:
+        return self._deploy_agent_internal(
+            agent_module=agent_module,
+            debug=debug,
+            no_test=no_test,
+            is_update=False,
+            description=description,
+        )
+
+    def update_agent(
+        self,
+        resource_name: str,
+        agent_module: str = "soc_agent",
+        debug: bool = False,
+        no_test: bool = False,
+        description: str | None = None,
+    ) -> str | None:
+        return self._deploy_agent_internal(
+            agent_module=agent_module,
+            debug=debug,
+            no_test=no_test,
+            is_update=True,
+            update_resource_name=resource_name,
+            description=description,
+        )
+
+    def _deploy_agent_internal(
+        self,
+        agent_module: str = "soc_agent",
+        debug: bool = False,
+        no_test: bool = False,
+        is_update: bool = False,
+        update_resource_name: str | None = None,
+        description: str | None = None,
     ) -> str | None:
         """
         Create and deploy a new Agent Engine instance.
@@ -545,7 +580,10 @@ class AgentEngineManager:
             Resource name of the created agent if successful, None otherwise
         """
         typer.echo("\n" + "=" * 80)
-        typer.secho("Creating Agent Engine Instance", fg=typer.colors.BLUE, bold=True)
+        action_text = "Updating" if is_update else "Creating"
+        typer.secho(
+            f"{action_text} Agent Engine Instance", fg=typer.colors.BLUE, bold=True
+        )
         typer.echo("=" * 80 + "\n")
 
         typer.echo(f"Agent module: {agent_module}")
@@ -594,14 +632,22 @@ class AgentEngineManager:
             if not has_secret and not has_path:
                 typer.secho(" Configuration Error", fg=typer.colors.RED, bold=True)
                 typer.echo()
-                typer.echo("Either CHRONICLE_SERVICE_ACCOUNT_SECRET or CHRONICLE_SERVICE_ACCOUNT_PATH must be set")
+                typer.echo(
+                    "Either CHRONICLE_SERVICE_ACCOUNT_SECRET or CHRONICLE_SERVICE_ACCOUNT_PATH must be set"
+                )
                 typer.echo()
                 typer.echo("Option 1 (Recommended): Use Secret Manager")
-                typer.echo("  1. Upload SA file: python installation_scripts/upload_secret.py upload")
-                typer.echo("  2. Add to .env: CHRONICLE_SERVICE_ACCOUNT_SECRET=projects/PROJECT/secrets/SECRET/versions/latest")
+                typer.echo(
+                    "  1. Upload SA file: python installation_scripts/upload_secret.py upload"
+                )
+                typer.echo(
+                    "  2. Add to .env: CHRONICLE_SERVICE_ACCOUNT_SECRET=projects/PROJECT/secrets/SECRET/versions/latest"
+                )
                 typer.echo()
                 typer.echo("Option 2 (Legacy): Use local file")
-                typer.echo("  Add to .env: CHRONICLE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json")
+                typer.echo(
+                    "  Add to .env: CHRONICLE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json"
+                )
                 return None
 
             # Validate RAG_CORPUS_ID format
@@ -646,7 +692,7 @@ class AgentEngineManager:
             if CHRONICLE_SERVICE_ACCOUNT_SECRET:
                 typer.secho(
                     "Using Secret Manager for service account authentication",
-                    fg=typer.colors.GREEN
+                    fg=typer.colors.GREEN,
                 )
                 typer.echo(f"  Secret: {CHRONICLE_SERVICE_ACCOUNT_SECRET}")
                 # No file copying needed - MCP server will read from Secret Manager
@@ -664,13 +710,17 @@ class AgentEngineManager:
 
                 typer.secho(
                     "Using local file for service account authentication (legacy mode)",
-                    fg=typer.colors.YELLOW
+                    fg=typer.colors.YELLOW,
                 )
                 typer.echo(f"  Path: {CHRONICLE_SERVICE_ACCOUNT_PATH}")
-                dest_dir = Path("./mcp-security/server/secops/secops_mcp/")
+                # Copy to the root of the deployment directory instead of inside the module
+                dest_dir = Path(".")
                 dest_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy(CHRONICLE_SERVICE_ACCOUNT_PATH, dest_dir)
-                typer.echo("Copied service account file for Chronicle MCP server")
+                sa_filename = Path(CHRONICLE_SERVICE_ACCOUNT_PATH).name
+                typer.echo(
+                    f"Copied service account file ({sa_filename}) to project root for deployment"
+                )
                 use_secret_manager = False
             else:
                 raise ValueError(
@@ -680,6 +730,8 @@ class AgentEngineManager:
             # Dynamically import and create the agent from the specified module
             typer.echo(f"Importing agent from {agent_module}...")
             os.environ["REASONING_ENGINE_DEPLOYMENT"] = "True"
+            if "GOOGLE_CLOUD_PROJECT" not in os.environ and GCP_PROJECT_ID:
+                os.environ["GOOGLE_CLOUD_PROJECT"] = GCP_PROJECT_ID
             # Allow Vertex AI init - agents need it to use Vertex AI models instead of genai client
             try:
                 agent_pkg = importlib.import_module(agent_module)
@@ -700,11 +752,37 @@ class AgentEngineManager:
             typer.echo("Creating agent...")
             agent = create_agent_func()
 
+            # Extract memory bank configuration if present
+            memory_bank_config = getattr(agent_pkg, "memory_bank_config", None)
+            if memory_bank_config:
+                typer.secho(
+                    f"Found Memory Bank configuration with {len(memory_bank_config.get('customization_configs', [{}])[0].get('memory_topics', []))} topics",
+                    fg=typer.colors.CYAN,
+                )
+            else:
+                typer.secho(
+                    "No Memory Bank configuration found in agent module.",
+                    fg=typer.colors.YELLOW,
+                )
+
             # Create the ADK app
+            from google.adk.artifacts.gcs_artifact_service import GcsArtifactService
+
+            def build_artifact_service():
+                bucket_name = os.environ.get("GCP_ARTIFACT_BUCKET")
+                if not bucket_name:
+                    raise ValueError(
+                        "GCP_ARTIFACT_BUCKET is required for GcsArtifactService (set in .env)"
+                    )
+                if bucket_name.startswith("gs://"):
+                    bucket_name = bucket_name[5:]
+                return GcsArtifactService(bucket_name=bucket_name)
+
             typer.echo("Creating ADK app...")
             app = AdkApp(
                 agent=agent,
                 enable_tracing=True,
+                artifact_service_builder=build_artifact_service,
             )
             # Get environment variables for deployment
             # HYBRID APPROACH:
@@ -714,11 +792,12 @@ class AgentEngineManager:
                 "CHRONICLE_PROJECT_ID": os.environ.get("CHRONICLE_PROJECT_ID"),
                 "CHRONICLE_CUSTOMER_ID": os.environ.get("CHRONICLE_CUSTOMER_ID"),
                 "CHRONICLE_REGION": os.environ.get("CHRONICLE_REGION", "us"),
-                "GCP_VERTEXAI_ENABLED": os.environ.get("GCP_VERTEXAI_ENABLED", "True"),
+                "GCP_VERTEXAI_ENABLED": os.environ.get("GCP_VERTEXAI_ENABLED", "TRUE"),
                 "PROJECT_ID": os.environ.get("GCP_PROJECT_ID"),
                 "GCP_PROJECT_ID": os.environ.get("GCP_PROJECT_ID"),
                 "GCP_LOCATION": os.environ.get("GCP_LOCATION", "us-central1"),
                 "GCP_STAGING_BUCKET": os.environ.get("GCP_STAGING_BUCKET"),
+                "GCP_ARTIFACT_BUCKET": os.environ.get("GCP_ARTIFACT_BUCKET"),
                 "RAG_CORPUS_ID": os.environ.get("RAG_CORPUS_ID"),
                 "SOAR_URL": os.environ.get("SOAR_URL"),
                 "SOAR_APP_KEY": os.environ.get("SOAR_APP_KEY"),
@@ -728,36 +807,61 @@ class AgentEngineManager:
                 # See: https://github.com/google/adk-python/issues/3628
                 "GOOGLE_CLOUD_LOCATION": "global",
                 "GOOGLE_GENAI_USE_VERTEXAI": "TRUE",
-                # Observability: Enable telemetry and logging
-                # See: https://cloud.google.com/agent-builder/agent-engine/manage/tracing
-                # See: https://cloud.google.com/agent-builder/agent-engine/manage/logging
-                "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "true",
-                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "true",
+                # OpenTelemetry Tracing and Logging
+                "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY": "TRUE",
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "TRUE",
+                "OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT": "32768",  # Truncate large tool payloads to prevent 64KB GCP Trace limit crash
+                "OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT": "32768",
+                "OTEL_SERVICE_NAME": "adk-soc-agent",
+                "OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED": "TRUE",
                 # GTI Response Caching (Latency Optimization)
                 "GTI_CACHE_ENABLED": os.environ.get("GTI_CACHE_ENABLED", "True"),
-                "GTI_CACHE_FILE_TTL": os.environ.get("GTI_CACHE_FILE_TTL", "86400"),  # 24h
+                "GTI_CACHE_FILE_TTL": os.environ.get(
+                    "GTI_CACHE_FILE_TTL", "86400"
+                ),  # 24h
                 "GTI_CACHE_IP_TTL": os.environ.get("GTI_CACHE_IP_TTL", "43200"),  # 12h
-                "GTI_CACHE_DOMAIN_TTL": os.environ.get("GTI_CACHE_DOMAIN_TTL", "1800"),  # 30m
+                "GTI_CACHE_DOMAIN_TTL": os.environ.get(
+                    "GTI_CACHE_DOMAIN_TTL", "1800"
+                ),  # 30m
                 "GTI_CACHE_URL_TTL": os.environ.get("GTI_CACHE_URL_TTL", "1800"),  # 30m
-                "GTI_CACHE_THREAT_ACTOR_TTL": os.environ.get("GTI_CACHE_THREAT_ACTOR_TTL", "86400"),  # 24h
-                "GTI_CACHE_MALWARE_FAMILY_TTL": os.environ.get("GTI_CACHE_MALWARE_FAMILY_TTL", "86400"),  # 24h
-                "GTI_CACHE_CAMPAIGN_TTL": os.environ.get("GTI_CACHE_CAMPAIGN_TTL", "43200"),  # 12h
-                "GTI_CACHE_REPORT_TTL": os.environ.get("GTI_CACHE_REPORT_TTL", "43200"),  # 12h
-                "GTI_CACHE_COLLECTION_TTL": os.environ.get("GTI_CACHE_COLLECTION_TTL", "43200"),  # 12h
-                "GTI_CACHE_THREAT_PROFILE_TTL": os.environ.get("GTI_CACHE_THREAT_PROFILE_TTL", "86400"),  # 24h
-                "GTI_CACHE_HUNTING_RULESET_TTL": os.environ.get("GTI_CACHE_HUNTING_RULESET_TTL", "86400"),  # 24h
+                "GTI_CACHE_THREAT_ACTOR_TTL": os.environ.get(
+                    "GTI_CACHE_THREAT_ACTOR_TTL", "86400"
+                ),  # 24h
+                "GTI_CACHE_MALWARE_FAMILY_TTL": os.environ.get(
+                    "GTI_CACHE_MALWARE_FAMILY_TTL", "86400"
+                ),  # 24h
+                "GTI_CACHE_CAMPAIGN_TTL": os.environ.get(
+                    "GTI_CACHE_CAMPAIGN_TTL", "43200"
+                ),  # 12h
+                "GTI_CACHE_REPORT_TTL": os.environ.get(
+                    "GTI_CACHE_REPORT_TTL", "43200"
+                ),  # 12h
+                "GTI_CACHE_COLLECTION_TTL": os.environ.get(
+                    "GTI_CACHE_COLLECTION_TTL", "43200"
+                ),  # 12h
+                "GTI_CACHE_THREAT_PROFILE_TTL": os.environ.get(
+                    "GTI_CACHE_THREAT_PROFILE_TTL", "86400"
+                ),  # 24h
+                "GTI_CACHE_HUNTING_RULESET_TTL": os.environ.get(
+                    "GTI_CACHE_HUNTING_RULESET_TTL", "86400"
+                ),  # 24h
                 "GTI_CACHE_MAX_SIZE": os.environ.get("GTI_CACHE_MAX_SIZE", "250"),
+                # ChatOps Webhook URL (passed to Reasoning Engine)
+                "WEBHOOK_URL": os.environ.get("WEBHOOK_URL"),
+                "CHATOPS_BASE_URL": os.environ.get("CHATOPS_BASE_URL"),
+                "CHRONICLE_CHATOPS_SECRET": os.environ.get("CHRONICLE_CHATOPS_SECRET"),
             }
 
             # Add service account configuration based on authentication method
             if use_secret_manager:
                 # Use Secret Manager - pass secret resource name
-                env_vars["CHRONICLE_SERVICE_ACCOUNT_SECRET"] = CHRONICLE_SERVICE_ACCOUNT_SECRET
+                env_vars["CHRONICLE_SERVICE_ACCOUNT_SECRET"] = (
+                    CHRONICLE_SERVICE_ACCOUNT_SECRET
+                )
             else:
                 # Use local file - pass filename only (file already copied to package)
                 sa_filename = Path(CHRONICLE_SERVICE_ACCOUNT_PATH).name
                 env_vars["SECOPS_SA_PATH"] = sa_filename
-
 
             # Determine display name based on agent module
             if agent_module == "soc_agent_flash":
@@ -779,15 +883,33 @@ class AgentEngineManager:
                     # Hide the property from the Pydantic type reflector natively using primitive bindings
                     app.__dict__[key] = "Schema Compatibility Shadow Wrapper"
 
-            # Deploy the agent engine
-            typer.echo(f"Deploying agent engine to Vertex AI as '{display_name}'...")
-            remote_app = agent_engines.create(
-                app,
-                display_name=display_name,
-                requirements=[
+            # Deploy or Update the agent engine
+            action_verb = "Updating" if is_update else "Deploying"
+            typer.echo(
+                f"{action_verb} agent engine to Vertex AI as '{display_name}'..."
+            )
+
+            extra_packages = [
+                "installation_scripts/install.sh",  # installs MCP server packages
+                "soc_agent",
+                "soc_agent_flash",
+                "soc_agent_tier1",
+                "soc_agent_cti",
+                "mcp-security/server/secops",
+                "mcp-security/server/secops-soar",
+                "mcp-security/server/gti",
+                "mcp-security/server/scc",
+            ]
+            if not use_secret_manager:
+                extra_packages.append(sa_filename)
+
+            deploy_kwargs = {
+                "display_name": display_name,
+                "description": description,
+                "requirements": [
                     "cloudpickle",
-                    "google-adk~=1.26.0",
-                    "google-cloud-aiplatform[agent-engines]~=1.140.0",
+                    "google-adk~=1.28.0",
+                    "google-cloud-aiplatform[agent-engines,evaluation]~=1.144.0",
                     "pydantic",
                     "python-dotenv",
                     "httpx>=0.28.1",
@@ -802,25 +924,96 @@ class AgentEngineManager:
                     "google-cloud-securitycenter>=1.38.0",
                     "google-cloud-asset>=3.15.0",
                     "google-cloud-secret-manager>=2.16.0",  # For Secret Manager access
+                    "google-cloud-logging>=3.11.0",
+                    "opentelemetry-sdk>=1.26.0",
+                    "opentelemetry-exporter-gcp-logging>=0.47b0",
+                    "opentelemetry-instrumentation-google-genai>=0.0.1",
                 ],
-                build_options={
+                "build_options": {
                     "installation_scripts": ["installation_scripts/install.sh"]
                 },
-                extra_packages=[
-                    "installation_scripts/install.sh",  # installs MCP server packages
-                    "soc_agent",
-                    "soc_agent_flash",
-                    "soc_agent_tier1",
-                    "soc_agent_cti",
-                    "mcp-security/server/secops",
-                    "mcp-security/server/secops-soar",
-                    "mcp-security/server/gti",
-                    "mcp-security/server/scc"
-                ],
-                env_vars=env_vars,
-            )
+                "extra_packages": extra_packages,
+                "env_vars": env_vars,
+            }
 
-            typer.secho("\n Agent deployed successfully!", fg=typer.colors.GREEN)
+            # Add Memory Bank configuration logging
+            if memory_bank_config:
+                typer.secho(
+                    "Memory Bank custom topics found in agent module.",
+                    fg=typer.colors.CYAN,
+                )
+            else:
+                logging.info("DEPLOYMENT: No memory_bank_config found.")
+
+            if is_update:
+                if not update_resource_name:
+                    raise ValueError(
+                        "update_resource_name must be provided for updates"
+                    )
+                remote_app = agent_engines.update(
+                    resource_name=update_resource_name,
+                    agent_engine=app,
+                    **deploy_kwargs,
+                )
+            else:
+                remote_app = agent_engines.create(app, **deploy_kwargs)
+
+            # If memory bank config is present, we must apply it via a separate update
+            # because the high-level create/update APIs don't currently support context_spec
+            if memory_bank_config:
+                try:
+                    typer.echo("Applying Memory Bank custom topics configuration...")
+                    client = vertexai.Client(
+                        project=self.project, location=self.location
+                    )
+
+                    # Debug: Check if already present
+                    existing_agent = client.agent_engines.get(
+                        name=remote_app.resource_name
+                    )
+                    if existing_agent.api_resource.context_spec:
+                        typer.echo("Existing context_spec found. Updating...")
+                    else:
+                        typer.echo("No existing context_spec found. Creating...")
+
+                    client.agent_engines.update(
+                        name=remote_app.resource_name,
+                        config={
+                            "context_spec": {"memory_bank_config": memory_bank_config}
+                        },
+                    )
+
+                    # Verify after update
+                    updated_agent = client.agent_engines.get(
+                        name=remote_app.resource_name
+                    )
+                    if updated_agent.api_resource.context_spec:
+                        typer.secho(
+                            "Memory Bank configuration verified on backend!",
+                            fg=typer.colors.GREEN,
+                        )
+                    else:
+                        typer.secho(
+                            "Warning: Memory Bank configuration NOT found on backend after update.",
+                            fg=typer.colors.YELLOW,
+                        )
+
+                    typer.secho(
+                        "Memory Bank configuration applied successfully!",
+                        fg=typer.colors.GREEN,
+                    )
+                except Exception as e:
+                    typer.secho(
+                        f"Warning: Failed to apply Memory Bank configuration: {e}",
+                        fg=typer.colors.YELLOW,
+                    )
+                    logging.error(
+                        f"DEPLOYMENT_ERROR: Failed to update context_spec: {e}",
+                        exc_info=True,
+                    )
+
+            success_text = "updated" if is_update else "deployed"
+            typer.secho(f"\n Agent {success_text} successfully!", fg=typer.colors.GREEN)
             typer.echo(f"Resource name: {remote_app.resource_name}")
 
             # Optionally run test
@@ -865,31 +1058,60 @@ class AgentEngineManager:
 
     async def _async_test_agent(self, remote_app):
         """Async test function for agent engine."""
-        user_id = "test_user"
-        session = await remote_app.async_create_session(user_id=user_id)
-        typer.echo(f"Created session: {session.get('id')}")
-
-        events = []
-        test_message = (
-            "Can you check our SOAR case management system to see if we have any currently open security cases that might relate to APT29?"
+        fd, log_path = tempfile.mkstemp(suffix=".log", prefix="agent_test_")
+        typer.secho(
+            f"\nRedirecting detailed test events to: {log_path}", fg=typer.colors.CYAN
         )
-        # test_message = "List rules with ursnif in the name."
-        # test_message = "List the first page of soar cases."
 
-        typer.echo(f"Sending test query: {test_message}")
-        async for event in remote_app.async_stream_query(
-            user_id=user_id, session_id=session.get("id"), message=test_message
-        ):
-            typer.echo(f"Event: {event}")
-            events.append(event)
+        with os.fdopen(fd, "w") as log_file:
+            user_id = "test_user"
+            session = await remote_app.async_create_session(user_id=user_id)
+            session_id = session.get("id")
+            typer.echo(f"Created session: {session_id}")
+            log_file.write(f"Created session: {session_id}\n")
 
-        if not events:
-            typer.secho(" No events received from agent!", fg=typer.colors.YELLOW)
-        else:
-            typer.secho(
-                f" Test completed successfully - received {len(events)} events",
-                fg=typer.colors.GREEN,
+            test_messages = (
+                "Use the get_ioc_matches tool for domain superstarts.top",
+                # "Get the 2 documents on Malware and then fetch_full_document for both",
+                # "List rules with ursnif in the name.",  # Chronicle SIEM MCP
+                # "List the first page of soar cases.",  # SOAR MCP
+                # memory save test
+                # "For our future investigations, please note that we have a critical asset: MALWARETEST-WIN at IP 50.90.32.142. Please acknowledge this so we have it for future reference.",
+                # soar case search test
+                # "Can you check our SOAR case management system to see if we have any currently open security cases that might relate to APT29?",
             )
+
+            for test_message in test_messages:
+                typer.echo(f"\nSending test query: {test_message}")
+                log_file.write(f"\n--- QUERY: {test_message} ---\n")
+
+                events = []
+                async for event in remote_app.async_stream_query(
+                    user_id=user_id, session_id=session_id, message=test_message
+                ):
+                    log_file.write(f"Event: {event}\n")
+                    print(f"Event: {event}\n")
+                    events.append(event)
+                    # Optional: Print a dot to show progress instead of full event
+                    print(".", end="", flush=True)
+
+                print()  # New line after dots
+
+                if not events:
+                    typer.secho(
+                        " No events received from agent!", fg=typer.colors.YELLOW
+                    )
+                    log_file.write("No events received from agent!\n")
+                else:
+                    typer.secho(
+                        f" Test completed successfully - received {len(events)} events",
+                        fg=typer.colors.GREEN,
+                    )
+                    log_file.write(
+                        f"Test completed successfully - received {len(events)} events\n"
+                    )
+
+        typer.secho(f"\nDetailed logs available at: {log_path}\n", fg=typer.colors.CYAN)
 
     def warmup_mcp_servers(self, resource_name: str) -> bool:
         """
@@ -912,7 +1134,9 @@ class AgentEngineManager:
             typer.echo("\n" + "=" * 80)
             typer.secho("MCP Connection Pre-Warming", fg=typer.colors.CYAN, bold=True)
             typer.echo("=" * 80 + "\n")
-            typer.echo("Initializing MCP server connections to reduce cold start latency...")
+            typer.echo(
+                "Initializing MCP server connections to reduce cold start latency..."
+            )
 
             # Get the agent
             remote_app = agent_engines.get(resource_name)
@@ -933,9 +1157,18 @@ class AgentEngineManager:
         # Warmup queries - each targets a different MCP server
         # Using lightweight queries to ensure fast warmup
         warmup_queries = [
-            ("List the first 3 SOAR cases", "SOAR MCP"),  # Lightweight - first page of cases
-            ("Check IP reputation 8.8.8.8", "GTI MCP"),  # Single IP lookup (cached after first call)
-            ("What tools are available in Chronicle SIEM?", "Chronicle SIEM MCP"),  # Tool discovery, no data query
+            (
+                "List the first 3 SOAR cases",
+                "SOAR MCP",
+            ),  # Lightweight - first page of cases
+            (
+                "Check IP reputation 8.8.8.8",
+                "GTI MCP",
+            ),  # Single IP lookup (cached after first call)
+            (
+                "What tools are available in Chronicle SIEM?",
+                "Chronicle SIEM MCP",
+            ),  # Tool discovery, no data query
         ]
 
         for query, target_mcp in warmup_queries:
@@ -950,9 +1183,15 @@ class AgentEngineManager:
                     event_count += 1
                     # Silently consume events - we just want to trigger MCP connections
 
-                typer.secho(f"  ✓ {target_mcp} warmed up ({event_count} events)", fg=typer.colors.GREEN)
+                typer.secho(
+                    f"  ✓ {target_mcp} warmed up ({event_count} events)",
+                    fg=typer.colors.GREEN,
+                )
             except Exception as e:
-                typer.secho(f"  Warning: {target_mcp} warmup failed: {e}", fg=typer.colors.YELLOW)
+                typer.secho(
+                    f"  Warning: {target_mcp} warmup failed: {e}",
+                    fg=typer.colors.YELLOW,
+                )
                 # Continue with other warmup queries even if one fails
 
         typer.echo("\n" + "=" * 80)
@@ -1222,13 +1461,19 @@ def create(
     no_test: Annotated[
         bool, typer.Option("--no-test", help="Skip automatic test after creation")
     ] = False,
+    description: Annotated[
+        str | None,
+        typer.Option(
+            "--description", "-d", help="Description for the deployed agent engine"
+        ),
+    ] = None,
     env_file: Annotated[
         Path, typer.Option(help="Path to the environment file.")
     ] = Path(".env"),
 ) -> None:
     """Create and deploy a new Agent Engine instance."""
     manager = AgentEngineManager(env_file)
-    resource_name = manager.create_agent(agent_module, debug, no_test)
+    resource_name = manager.create_agent(agent_module, debug, no_test, description)
 
     if resource_name:
         typer.echo("\n" + "=" * 80)
@@ -1241,28 +1486,90 @@ def create(
             resource_name.split("/")[-1] if "/" in resource_name else resource_name
         )
         typer.echo(f"AGENT_ENGINE_ID={engine_id}")
-        
+
         # Write back to .env automatically
         try:
             target_env = manager.env_file
             if target_env.exists():
                 set_key(str(target_env), "AGENT_ENGINE_RESOURCE_NAME", resource_name)
                 set_key(str(target_env), "AGENT_ENGINE_ID", engine_id)
-                typer.secho("\n Automatically updated .env with new agent coordinates!", fg=typer.colors.GREEN)
+                typer.secho(
+                    "\n Automatically updated .env with new agent coordinates!",
+                    fg=typer.colors.GREEN,
+                )
         except Exception as e:
             typer.secho(f"\n Failed to auto-update .env: {e}", fg=typer.colors.YELLOW)
-            
+
     else:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def update(
+    resource_name: Annotated[
+        str | None,
+        typer.Option(
+            "--resource",
+            "-r",
+            help="Resource name of the agent to update. If not provided, AGENT_ENGINE_RESOURCE_NAME from .env is used.",
+        ),
+    ] = None,
+    agent_module: Annotated[
+        str,
+        typer.Option(
+            "--agent-module",
+            "-a",
+            help="Agent module to deploy (e.g., 'soc_agent', 'soc_agent_flash')",
+        ),
+    ] = "soc_agent",
+    debug: Annotated[
+        bool, typer.Option("--debug", help="Enable debug mode with verbose logging")
+    ] = False,
+    no_test: Annotated[
+        bool, typer.Option("--no-test", help="Skip automatic test after update")
+    ] = False,
+    description: Annotated[
+        str | None,
+        typer.Option(
+            "--description", "-d", help="Description for the deployed agent engine"
+        ),
+    ] = None,
+    env_file: Annotated[
+        Path, typer.Option(help="Path to the environment file.")
+    ] = Path(".env"),
+) -> None:
+    """Update an existing Agent Engine instance in-place."""
+    manager = AgentEngineManager(env_file)
+
+    if not resource_name:
+        resource_name = os.environ.get("AGENT_ENGINE_RESOURCE_NAME")
+        if not resource_name:
+            typer.secho(
+                "Error: No resource name provided and AGENT_ENGINE_RESOURCE_NAME not found in environment.",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+    updated_resource = manager.update_agent(
+        resource_name, agent_module, debug, no_test, description
+    )
+
+    if updated_resource:
+        typer.echo("\n" + "=" * 80)
+        typer.secho("UPDATE COMPLETE", fg=typer.colors.GREEN, bold=True)
+        typer.echo("=" * 80)
+    else:
+        raise typer.Exit(code=1)
+
 
 @app.command()
 def deploy(
     agent_module: Annotated[
         str,
         typer.Option(
-            "--agent-module", 
-            "-a", 
-            help="Agent module to deploy (e.g., 'soc_agent', 'soc_agent_flash')"
+            "--agent-module",
+            "-a",
+            help="Agent module to deploy (e.g., 'soc_agent', 'soc_agent_flash')",
         ),
     ] = "soc_agent",
     debug: Annotated[
@@ -1271,17 +1578,25 @@ def deploy(
     no_test: Annotated[
         bool, typer.Option("--no-test", help="Skip automatic test after creation")
     ] = False,
+    description: Annotated[
+        str | None,
+        typer.Option(
+            "--description", "-d", help="Description for the deployed agent engine"
+        ),
+    ] = None,
     env_file: Annotated[
         Path, typer.Option(help="Path to the environment file.")
     ] = Path(".env"),
 ) -> None:
     """Intelligently deploy a new Agent Engine instance and cleanup older versions."""
     typer.echo("\n" + "=" * 80)
-    typer.secho("Intelligent Deployment (Build & Replace)", fg=typer.colors.MAGENTA, bold=True)
+    typer.secho(
+        "Intelligent Deployment (Build & Replace)", fg=typer.colors.MAGENTA, bold=True
+    )
     typer.echo("=" * 80 + "\n")
 
     manager = AgentEngineManager(env_file)
-    
+
     # Determine what the display name will be so we can find orphans later
     if agent_module == "soc_agent_flash":
         display_name = "SecOps Security Agent - Flash"
@@ -1293,32 +1608,46 @@ def deploy(
         display_name = "SecOps Security Agent - CTI"
     else:
         display_name = f"SecOps Security Agent - {agent_module}"
-        
+
     typer.echo(f"Targeting logic for: {display_name}")
-    
+
     # Find existing agents
     orphans = manager.get_agents_by_display_name(display_name)
     if orphans:
-        typer.secho(f"Found {len(orphans)} existing '{display_name}' instances.", fg=typer.colors.YELLOW)
+        typer.secho(
+            f"Found {len(orphans)} existing '{display_name}' instances.",
+            fg=typer.colors.YELLOW,
+        )
     else:
-        typer.secho("No existing instances found. Proceeding with fresh build.", fg=typer.colors.GREEN)
-        
+        typer.secho(
+            "No existing instances found. Proceeding with fresh build.",
+            fg=typer.colors.GREEN,
+        )
+
     # Create the new agent
     typer.echo("\n--- Phase 1: Building New Engine ---")
-    resource_name = manager.create_agent(agent_module, debug, no_test)
-    
+    resource_name = manager.create_agent(
+        agent_module, debug, no_test, description=description
+    )
+
     if resource_name:
         typer.echo("\n--- Phase 2: Updating Environment ---")
-        engine_id = resource_name.split("/")[-1] if "/" in resource_name else resource_name
-        
+        engine_id = (
+            resource_name.split("/")[-1] if "/" in resource_name else resource_name
+        )
+
         try:
             target_env = manager.env_file
             if target_env.exists():
                 set_key(str(target_env), "AGENT_ENGINE_RESOURCE_NAME", resource_name)
                 set_key(str(target_env), "AGENT_ENGINE_ID", engine_id)
-                typer.secho(f"Successfully bound .env to -> {engine_id}", fg=typer.colors.GREEN)
+                typer.secho(
+                    f"Successfully bound .env to -> {engine_id}", fg=typer.colors.GREEN
+                )
         except Exception as e:
-            typer.secho(f"Warning: Failed to auto-update .env: {e}", fg=typer.colors.YELLOW)
+            typer.secho(
+                f"Warning: Failed to auto-update .env: {e}", fg=typer.colors.YELLOW
+            )
 
         # Cleanup old agents (Vertex + AgentSpace UI)
         if orphans:
@@ -1326,38 +1655,56 @@ def deploy(
             # 1. Purge Vertex AI containers
             for orphan in orphans:
                 if orphan["resource_name"] != resource_name:
-                    typer.secho(f"Deleting stale engine: {orphan['resource_name']}", fg=typer.colors.YELLOW)
+                    typer.secho(
+                        f"Deleting stale engine: {orphan['resource_name']}",
+                        fg=typer.colors.YELLOW,
+                    )
                     manager.delete_agent(orphan["resource_name"], force=True)
-            
+
             # 2. Unlink AgentSpace UI proxies implicitly
             try:
                 typer.echo("\n--- Phase 4: Validating Workspace UI Proxies ---")
                 ui_manager = AgentSpaceManager(env_file)
                 proxy_agents = ui_manager.list_agents(show_raw=False)
-                
+
                 # AgentSpace uses a different display name than Vertex AI natively
-                proxy_display_name = ui_manager.env_vars.get("AGENT_DISPLAY_NAME", "SecOps Security Agent")
-                
+                proxy_display_name = ui_manager.env_vars.get(
+                    "AGENT_DISPLAY_NAME", "SecOps Security Agent"
+                )
+
                 if proxy_agents:
                     for proxy in proxy_agents:
                         # Unlink proxies matching our exact displayName that do NOT match the one we are actively writing
                         if proxy.get("displayName") == proxy_display_name:
                             proxy_id = proxy.get("name", "").split("/")[-1]
-                            
+
                             # Never nuke the active .env proxy!
-                            if proxy_id != ui_manager.env_vars.get("AGENTSPACE_AGENT_ID"):
-                                typer.secho(f"Unlinking stale Workspace Proxy: {proxy_id}", fg=typer.colors.YELLOW)
-                                ui_manager.unlink_agent_from_agentspace(agent_id=proxy_id, force=True)
+                            if proxy_id != ui_manager.env_vars.get(
+                                "AGENTSPACE_AGENT_ID"
+                            ):
+                                typer.secho(
+                                    f"Unlinking stale Workspace Proxy: {proxy_id}",
+                                    fg=typer.colors.YELLOW,
+                                )
+                                ui_manager.unlink_agent_from_agentspace(
+                                    agent_id=proxy_id, force=True
+                                )
             except Exception as e:
-                typer.secho(f"Warning: Failed to clean AgentSpace workspace proxies implicitly: {e}", fg=typer.colors.YELLOW)
-                
+                typer.secho(
+                    f"Warning: Failed to clean AgentSpace workspace proxies implicitly: {e}",
+                    fg=typer.colors.YELLOW,
+                )
+
             typer.secho("\n Garbage collection complete!", fg=typer.colors.GREEN)
-            
+
         typer.echo("\n" + "=" * 80)
         typer.secho("INTELLIGENT DEPLOYMENT COMPLETE", fg=typer.colors.GREEN, bold=True)
         typer.echo("=" * 80)
     else:
-        typer.secho("\nDeployment failed during Phase 1. Aborting garbage collection.", fg=typer.colors.RED)
+        typer.secho(
+            "\nDeployment failed during Phase 1. Aborting garbage collection.",
+            fg=typer.colors.RED,
+        )
         raise typer.Exit(code=1)
 
 
@@ -1426,7 +1773,9 @@ def warmup(
     ] = None,
     index: Annotated[
         int | None,
-        typer.Option("--index", "-i", help="Index of the agent from the list to warm up"),
+        typer.Option(
+            "--index", "-i", help="Index of the agent from the list to warm up"
+        ),
     ] = None,
     env_file: Annotated[
         Path, typer.Option(help="Path to the environment file.")

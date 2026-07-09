@@ -56,23 +56,25 @@ class AgentSpaceManager:
         self.env_vars = self._load_env_vars()
 
         # Initialize credentials with proper scopes for Discovery Engine API
-        service_account_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+        service_account_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         if service_account_path:
             # Use service account with explicit scopes
             from google.oauth2 import service_account
+
             self.creds = service_account.Credentials.from_service_account_file(
                 service_account_path,
-                scopes=['https://www.googleapis.com/auth/cloud-platform']
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
             )
             # Extract project from service account file
             import json
+
             with open(service_account_path) as f:
                 sa_info = json.load(f)
-                self.project = sa_info.get('project_id')
+                self.project = sa_info.get("project_id")
         else:
             # Fall back to default credentials
             self.creds, self.project = google.auth.default(
-                scopes=['https://www.googleapis.com/auth/cloud-platform']
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
 
     def _load_env_vars(self) -> dict[str, str]:
@@ -213,7 +215,7 @@ class AgentSpaceManager:
 
     def _build_agent_config(self) -> dict[str, Any]:
         """Build the agent configuration payload."""
-        config = {
+        config: dict[str, Any] = {
             "displayName": self.env_vars.get(
                 "AGENT_DISPLAY_NAME", "SecOps Security Agent"
             ),
@@ -233,16 +235,28 @@ class AgentSpaceManager:
                 },
             },
         }
+
+        # Handle authorizations using the new structure
         if oauth_auth_id := self.env_vars.get("OAUTH_AUTH_ID"):
-            config["adk_agent_definition"]["authorizations"] = [
-                f"projects/{self.env_vars['GCP_PROJECT_NUMBER']}/locations/global/authorizations/{oauth_auth_id}"
-            ]
+            auth_resource = f"projects/{self.env_vars['GCP_PROJECT_NUMBER']}/locations/global/authorizations/{oauth_auth_id}"
+            config["authorization_config"] = {"tool_authorizations": [auth_resource]}
         else:
-            config["adk_agent_definition"]["authorizations"] = []
+            config["authorization_config"] = {"tool_authorizations": []}
+
         return config
 
-    def register_agent(self, force: bool = False) -> bool:
+    def register_agent(
+        self,
+        force: bool = False,
+        agent_engine_id: str | None = None,
+        app_id: str | None = None,
+    ) -> bool:
         """Register agent with AgentSpace."""
+        if agent_engine_id:
+            self.env_vars["AGENT_ENGINE_RESOURCE_NAME"] = agent_engine_id
+        if app_id:
+            self.env_vars["AGENTSPACE_APP_ID"] = app_id
+
         typer.echo("Registering agent with AgentSpace...")
         is_valid, errors = self._validate_environment()
         if not is_valid:
@@ -790,11 +804,15 @@ class AgentSpaceManager:
             },
         }
 
-        # Add authorization if provided
+        # Add authorization if provided using new structure
         if auth_id:
-            data["adk_agent_definition"]["authorizations"] = [
-                f"projects/{project_number}/locations/global/authorizations/{auth_id}"
-            ]
+            data["authorization_config"] = {
+                "tool_authorizations": [
+                    f"projects/{project_number}/locations/global/authorizations/{auth_id}"
+                ]
+            }
+        else:
+            data["authorization_config"] = {"tool_authorizations": []}
 
         try:
             response = requests.post(url, headers=headers, json=data)
@@ -1351,13 +1369,20 @@ def register(
     force: Annotated[
         bool, typer.Option("--force", help="Force re-registration if agent exists.")
     ] = False,
+    agent_engine_id: Annotated[
+        str | None,
+        typer.Option("--agent-engine-id", help="Reasoning Engine resource name."),
+    ] = None,
+    app_id: Annotated[
+        str | None, typer.Option("--app-id", help="AgentSpace App ID.")
+    ] = None,
     env_file: Annotated[
         Path, typer.Option(help="Path to the environment file.")
     ] = Path(".env"),
 ) -> None:
     """Register the agent with AgentSpace."""
     manager = AgentSpaceManager(env_file)
-    if not manager.register_agent(force):
+    if not manager.register_agent(force, agent_engine_id, app_id):
         raise typer.Exit(code=1)
 
 

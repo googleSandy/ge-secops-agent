@@ -32,8 +32,8 @@ See PR #25 discussion for additional context on this architectural decision.
 """
 
 import logging
+import mimetypes
 import os
-import sys
 from pathlib import Path
 
 import vertexai
@@ -42,8 +42,11 @@ from google.adk.agents import Agent
 from google.adk.tools import google_search
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
-from mcp import StdioServerParameters
 from vertexai.preview import rag
+
+
+# Add text/markdown mimetype for .md files
+mimetypes.add_type("text/markdown", ".md")
 
 
 # Configure logging
@@ -51,56 +54,55 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-
-
-
-
-
-
-
 class DynamicMcpToolset(McpToolset):
     mcp_module: str = ""
     target_env: dict = {}
     _is_dynamic_initialized: bool = False
-    
+
     def __init__(self, mcp_module: str, target_env: dict, **kwargs):
-        from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
         from mcp.client.stdio import StdioServerParameters
-        
+
         # Deploy a placeholder structure that the ADK will serialize natively
         dummy_params = StdioConnectionParams(
-            server_params=StdioServerParameters(command="python3", args=["-m", mcp_module], env={}), timeout=60000
+            server_params=StdioServerParameters(
+                command="python3", args=["-m", mcp_module], env={}
+            ),
+            timeout=60000,
         )
         # CRITICAL: Suppress errlog default injection (`sys.stderr` Stream) to permit serialization
         super().__init__(connection_params=dummy_params, errlog=None, **kwargs)
         self.mcp_module = mcp_module
         self.target_env = target_env
         self._is_dynamic_initialized = False
-        
+
     async def get_tools(self, readonly_context=None) -> list:
         if not getattr(self, "_is_dynamic_initialized", False):
+            import os
+            import sys
+
             from mcp.client.stdio import StdioServerParameters
-            import os, sys
-            
+
             # The exact container execution environment
             container_env = dict(os.environ)
-            container_env["PYTHONPATH"] = ":".join(sys.path) + ":mcp-security/server/secops:mcp-security/server/secops-soar:mcp-security/server/gti:mcp-security/server/scc"
-            
+            container_env["PYTHONPATH"] = (
+                ":".join(sys.path)
+                + ":mcp-security/server/secops:mcp-security/server/secops-soar:mcp-security/server/gti:mcp-security/server/scc"
+            )
+
             for k, v in self.target_env.items():
                 if v is not None:
                     container_env[k] = v
-                    
+
             # Overwrite the payload natively substituting the explicit system binary path
             self._connection_params.server_params = StdioServerParameters(
-                command=sys.executable,
-                args=["-m", self.mcp_module],
-                env=container_env
+                command=sys.executable, args=["-m", self.mcp_module], env=container_env
             )
             # CRITICAL: Overwrite the privately cached copy housed inside the Session Manager
             self._mcp_session_manager._connection_params = self._connection_params
-            
+
             self._is_dynamic_initialized = True
         return await super().get_tools(readonly_context)
+
 
 def create_agent():
     """
@@ -203,9 +205,6 @@ def create_agent():
     # Initialize list to collect all tools
     tools = []
 
-    # Vertex AI extracts `extra_packages` to the container working directory natively
-    CONTAINER_PYTHONPATH = "mcp-security/server/secops:mcp-security/server/secops-soar:mcp-security/server/gti:mcp-security/server/scc"
-
     # ========================================================================
     # Configure Chronicle/SIEM MCP Tool
     # ========================================================================
@@ -217,7 +216,7 @@ def create_agent():
             "CHRONICLE_CUSTOMER_ID": CHRONICLE_CUSTOMER_ID,
             "CHRONICLE_REGION": CHRONICLE_REGION,
             "SECOPS_SA_PATH": service_account_filename,
-        }
+        },
     )
     tools.append(secops_siem_tools)
 
@@ -230,7 +229,7 @@ def create_agent():
         target_env={
             "SOAR_URL": SOAR_URL,
             "SOAR_APP_KEY": SOAR_APP_KEY,
-        }
+        },
     )
     tools.append(secops_soar_tools)
 
@@ -242,7 +241,7 @@ def create_agent():
         mcp_module="gti_mcp.server",
         target_env={
             "VT_APIKEY": GTI_API_KEY,
-        }
+        },
     )
     tools.append(gti_tools)
 
@@ -250,10 +249,7 @@ def create_agent():
     # Configure Security Command Center (SCC) MCP Tool
     # ========================================================================
     logger.info("Configuring SCC tools...")
-    scc_tools = DynamicMcpToolset(
-        mcp_module="scc_mcp",
-        target_env={}
-    )
+    scc_tools = DynamicMcpToolset(mcp_module="scc_mcp", target_env={})
     tools.append(scc_tools)
 
     # ========================================================================
@@ -261,10 +257,10 @@ def create_agent():
     # ========================================================================
     if RAG_CORPUS_ID:
         logger.info(f"Configuring RAG retrieval with corpus: {RAG_CORPUS_ID}")
-        
+
         def retrieve_agentic_soc_runbooks(query: str) -> str:
             """Use this tool to retrieve IRPs, Runbooks, Common Steps, Procedure, guidelines, and Personas for the Agentic SOC.
-            
+
             Args:
                 query: The search query to find relevant documentation in the RAG corpus.
             """
@@ -277,7 +273,7 @@ def create_agent():
                 )
                 if not response.contexts or not response.contexts.contexts:
                     return "No relevant documentation found in RAG corpus."
-                
+
                 # Format contexts into a single string
                 result_parts = []
                 for index, context in enumerate(response.contexts.contexts):
@@ -285,7 +281,7 @@ def create_agent():
                 return "\n".join(result_parts)
             except Exception as e:
                 return f"Error retrieving from RAG corpus: {str(e)}"
-                
+
         tools.append(retrieve_agentic_soc_runbooks)
     else:
         logger.warning("RAG_CORPUS_ID not configured, skipping RAG retrieval tool")
