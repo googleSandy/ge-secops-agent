@@ -13,7 +13,7 @@ The **ChatOps Context Integration** is designed to enable true "Human-in-the-loo
 The solution will introduce a new lightweight API integration layer bridging the Chat Interface and Vertex AI Agent Engine.
 
 ### 3.1 Components
-1. **Card Generation Enhancements (`card_client.py`)**: 
+1. **Card Generation Enhancements (`card_client.py`)**:
    * Update the card payload generator to embed structured URLs containing Base64 encoded JSON parameters: `session_id`, `agent_engine_id`, and `action_type`.
    * Implement HMAC-SHA256 or JWT signing to affix a signature to the query parameters.
 2. **Action Webhook (Cloud Function or Cloud Run)**:

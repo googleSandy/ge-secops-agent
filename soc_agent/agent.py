@@ -98,11 +98,11 @@ im_session.InMemorySessionService.append_event = _patched_append_event
 
 
 from google.adk.tools.load_memory_tool import LoadMemoryTool  # noqa: E402
-from google.adk.tools.preload_memory_tool import PreloadMemoryTool  # noqa: E402
 from google.adk.tools.mcp_tool.mcp_session_manager import (  # noqa: E402
     StdioConnectionParams,  # noqa: E402
 )
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset  # noqa: E402
+from google.adk.tools.preload_memory_tool import PreloadMemoryTool  # noqa: E402
 from google.adk.tools.retrieval import VertexAiRagRetrieval  # noqa: E402
 from google.cloud import storage  # noqa: E402
 from google.genai.types import (  # noqa: E402
@@ -193,17 +193,11 @@ class SharedScopePreloadMemoryTool(PreloadMemoryTool):
 
     SHARED_USER_ID = "global_soc_team"
 
-    async def process_llm_request(
-        self, *, tool_context, llm_request
-    ) -> None:
+    async def process_llm_request(self, *, tool_context, llm_request) -> None:
         from google.adk.tools import _memory_entry_utils
 
         user_content = tool_context.user_content
-        if (
-            not user_content
-            or not user_content.parts
-            or not user_content.parts[0].text
-        ):
+        if not user_content or not user_content.parts or not user_content.parts[0].text:
             return
 
         user_query = user_content.parts[0].text
@@ -214,9 +208,7 @@ class SharedScopePreloadMemoryTool(PreloadMemoryTool):
                 tool_context._invocation_context, "memory_service", None
             )
             if not memory_service:
-                logger.warning(
-                    "PRELOAD_MEMORY: No memory service available, skipping."
-                )
+                logger.warning("PRELOAD_MEMORY: No memory service available, skipping.")
                 return
 
             response = await memory_service.search_memory(
@@ -236,15 +228,11 @@ class SharedScopePreloadMemoryTool(PreloadMemoryTool):
 
         memory_text_lines = []
         for memory in response.memories:
-            if time_str := (
-                f"Time: {memory.timestamp}" if memory.timestamp else ""
-            ):
+            if time_str := (f"Time: {memory.timestamp}" if memory.timestamp else ""):
                 memory_text_lines.append(time_str)
             if memory_text := _memory_entry_utils.extract_text(memory):
                 memory_text_lines.append(
-                    f"{memory.author}: {memory_text}"
-                    if memory.author
-                    else memory_text
+                    f"{memory.author}: {memory_text}" if memory.author else memory_text
                 )
         if not memory_text_lines:
             return
@@ -1275,7 +1263,9 @@ CRITICAL: Summarize procedures and ask for user permission before executing stat
         )
 
     # Add Memory tools — PreloadMemory for automatic context, LoadMemory for on-demand queries
-    orchestrator_tools.append(SharedScopePreloadMemoryTool())  # Auto-load at start of every turn
+    orchestrator_tools.append(
+        SharedScopePreloadMemoryTool()
+    )  # Auto-load at start of every turn
     orchestrator_tools.append(LoadMemoryTool())  # On-demand memory queries
 
     # Build orchestrator instruction
