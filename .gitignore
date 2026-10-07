@@ -28,7 +28,6 @@ GEMINI.md
 docs/
 test_scripts/
 
-A2UI
 ai-runbooks
 
 # Ignore service account and secret JSON files
